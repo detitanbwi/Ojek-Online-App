@@ -307,6 +307,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
   List<dynamic> historyOrders = [];
   Map<String, dynamic>? activeOrder;
   bool _loadingHistory = false;
+  
+  Timer? _syncTimer;
 
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
@@ -323,6 +325,12 @@ class _DriverHomePageState extends State<DriverHomePage> {
     loadSavedState();
     fetchOneSignalId();
     setupOneSignalObserver();
+  }
+
+  @override
+  void dispose() {
+    stopSyncTimer();
+    super.dispose();
   }
 
   void loadSavedState() async {
@@ -346,6 +354,57 @@ class _DriverHomePageState extends State<DriverHomePage> {
       fetchOrderHistory();
       checkActiveOrder();
       fetchDriverProfile();
+      startSyncTimer();
+    }
+  }
+
+  void startSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (isOnline) {
+        checkDriverStatusOnline();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  void stopSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer = null;
+  }
+
+  Future<void> checkDriverStatusOnline() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$backendUrl/driver/profile?phone=$driverPhone'),
+      );
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success'] == true) {
+        final bool serverOnline = result['data']['status_online'] == true;
+        
+        if (isOnline && !serverOnline) {
+          stopSyncTimer();
+          setState(() {
+            isOnline = false;
+            activeOrder = null;
+            driverBalance = 0.0;
+          });
+          saveState(online: false, name: driverName, phone: driverPhone, id: driverId);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Koneksi Anda telah diputus (detached) oleh Admin.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        } else if (isOnline && serverOnline) {
+          setState(() {
+            driverBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error in status sync: $e");
     }
   }
 
@@ -517,6 +576,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
         // Load active and history data
         fetchOrderHistory();
         checkActiveOrder();
+        startSyncTimer();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -559,6 +619,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
       final bool isDriverNotFound = response.statusCode == 404 || (result != null && result['message'] == 'Driver not found.');
 
       if ((response.statusCode == 200 && result['success'] == true) || isDriverNotFound) {
+        stopSyncTimer();
         setState(() {
           isOnline = false;
           activeOrder = null;
