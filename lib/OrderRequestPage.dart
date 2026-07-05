@@ -174,168 +174,239 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    
-    // Adapt colors based on system dark/light theme
-    final Color backgroundColor = isDark ? const Color(0xFF00113B) : Colors.grey[100]!;
-    final Color cardColor = isDark ? const Color(0xFF0C2461) : Colors.white;
-    final Color titleColor = isDark ? Colors.white : const Color(0xFF00113B);
-    final Color subtitleColor = isDark ? Colors.white60 : Colors.black54;
-
     return Scaffold(
-      backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            // Top Section - Header with pulsing ring and circular timer countdown
-            Padding(
-              padding: const EdgeInsets.only(top: 40.0),
-              child: Column(
-                children: [
-                  Stack(
-                    alignment: Alignment.center,
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF0F172A), // Slate 900
+              Color(0xFF1E293B), // Slate 800
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Scrollable content area containing the timer and the ride details card
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+                  child: Column(
                     children: [
-                      ScaleTransition(
-                        scale: _pulseController,
-                        child: Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFCC5900).withOpacity(isDark ? 0.2 : 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
+                      const SizedBox(height: 20),
+                      
+                      // 1. Glowing countdown timer
                       Container(
-                        width: 90,
-                        height: 90,
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: (isDark ? const Color(0xFFCC5900) : Colors.orangeAccent).withOpacity(0.3),
+                          color: Colors.white.withOpacity(0.02),
                           shape: BoxShape.circle,
                         ),
-                        child: CircularProgressIndicator(
-                          value: _secondsRemaining / 10.0,
-                          strokeWidth: 6,
-                          backgroundColor: Colors.white10,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
-                        ),
-                      ),
-                      Text(
-                        '$_secondsRemaining',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          color: titleColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'ADA ORDERAN MASUK!',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                      color: titleColor,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Order ID: #${widget.orderId}',
-                    style: TextStyle(fontSize: 14, color: subtitleColor),
-                  ),
-                ],
-              ),
-            ),
-
-            // Middle Section - Route and Price Details Card
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Card(
-                color: cardColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                elevation: isDark ? 10 : 3,
-                shadowColor: Colors.black26,
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Origin Info
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.my_location, color: Colors.green, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'TITIK JEMPUT',
-                                  style: TextStyle(color: subtitleColor.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  widget.origin,
-                                  style: TextStyle(color: titleColor, fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12.0),
-                        child: Divider(color: Colors.white10, thickness: 1, indent: 36),
-                      ),
-                      // Destination Info
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.location_on, color: Colors.redAccent, size: 24),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'TITIK TUJUAN',
-                                  style: TextStyle(color: subtitleColor.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  widget.destination,
-                                  style: TextStyle(color: titleColor, fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 16.0),
-                        child: Divider(color: Colors.black12, thickness: 1.5),
-                      ),
-                      // Price Info
-                      Center(
-                        child: Column(
+                        child: Stack(
+                          alignment: Alignment.center,
                           children: [
-                            Text(
-                              'TARIF BERSIH',
-                              style: TextStyle(color: subtitleColor.withOpacity(0.6), fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Rp ${formatPrice(widget.price)}',
-                              style: const TextStyle(
-                                color: Color(0xFFFF8C00),
-                                fontSize: 34,
-                                fontWeight: FontWeight.w900,
+                            ScaleTransition(
+                              scale: _pulseController,
+                              child: Container(
+                                width: 110,
+                                height: 110,
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withOpacity(0.08),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.amber.withOpacity(0.2), width: 2),
+                                ),
                               ),
                             ),
+                            SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: CircularProgressIndicator(
+                                value: _secondsRemaining / 10.0,
+                                strokeWidth: 4,
+                                backgroundColor: Colors.white.withOpacity(0.08),
+                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
+                              ),
+                            ),
+                            Text(
+                              '$_secondsRemaining',
+                              style: const TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // 2. Alert Header Title
+                      const Text(
+                        'ADA ORDERAN MASUK!',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Order ID: #${widget.orderId}',
+                        style: TextStyle(
+                          fontSize: 13, 
+                          color: Colors.white.withOpacity(0.4),
+                          fontWeight: FontWeight.w500
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 28),
+
+                      // 3. Address Route & Price Details Card (Glassmorphic design)
+                      Container(
+                        padding: const EdgeInsets.all(24.0),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(color: Colors.white.withOpacity(0.08)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Connected route timeline layout
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Left timeline connector
+                                Column(
+                                  children: [
+                                    const SizedBox(height: 4),
+                                    const Icon(Icons.my_location, color: Colors.greenAccent, size: 20),
+                                    Container(
+                                      width: 1.5,
+                                      height: 65,
+                                      margin: const EdgeInsets.symmetric(vertical: 6),
+                                      decoration: const BoxDecoration(
+                                        color: Colors.white12,
+                                      ),
+                                    ),
+                                    const Icon(Icons.location_on, color: Colors.redAccent, size: 22),
+                                  ],
+                                ),
+                                const SizedBox(width: 16),
+                                // Right Address Texts
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Origin Address
+                                      Text(
+                                        'TITIK JEMPUT',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.3),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.2
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        widget.origin,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      
+                                      const SizedBox(height: 28), // Matches the height of connector line
+                                      
+                                      // Destination Address
+                                      Text(
+                                        'TITIK TUJUAN',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.3),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.2
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        widget.destination,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            
+                            const SizedBox(height: 24),
+                            const Divider(color: Colors.white12, thickness: 1),
+                            const SizedBox(height: 12),
+                            
+                            // Glowing Amber Net Fare Box
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.amber.shade700.withOpacity(0.12),
+                                    Colors.amber.shade900.withOpacity(0.04),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.amber.shade700.withOpacity(0.2)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'TARIF BERSIH',
+                                        style: TextStyle(
+                                          color: Colors.amber.shade300,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 1.2,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      const Text(
+                                        'Pendapatan bersih Anda',
+                                        style: TextStyle(color: Colors.white38, fontSize: 10),
+                                      ),
+                                    ],
+                                  ),
+                                  Text(
+                                    'Rp ${formatPrice(widget.price)}',
+                                    style: const TextStyle(
+                                      color: Colors.amber,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
                           ],
                         ),
                       ),
@@ -343,46 +414,61 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                   ),
                 ),
               ),
-            ),
-
-            // Bottom Section - Swipe To Accept and Decline Button
-            Padding(
-              padding: const EdgeInsets.only(left: 24.0, right: 24.0, bottom: 40.0),
-              child: Column(
-                children: [
-                  // Swipe To Accept Button
-                  SwipeButton(
-                    text: "Sapu kanan untuk Terima",
-                    onSwipeComplete: acceptOrder,
-                  ),
-                  const SizedBox(height: 16),
-                  // Decline Text Button
-                  TextButton(
-                    onPressed: declineOrder,
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+              
+              // Sticky bottom action buttons container (Decline & Swipe to accept)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A).withOpacity(0.6),
+                  border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Glassmorphic Swipe To Accept Button
+                    SwipeButton(
+                      text: "Geser ke kanan untuk Terima",
+                      onSwipeComplete: acceptOrder,
                     ),
-                    child: const Text(
-                      'TOLAK PESANAN',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 1),
+                    const SizedBox(height: 12),
+                    // Elegant Reject button
+                    TextButton(
+                      onPressed: declineOrder,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                      ),
+                      child: Text(
+                        'LEWATKAN PESANAN',
+                        style: TextStyle(
+                          fontSize: 13, 
+                          fontWeight: FontWeight.w800, 
+                          color: Colors.redAccent.withOpacity(0.8),
+                          letterSpacing: 1.2
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// Swipe Button Widget
+// Custom Glassmorphic Swipe Button Widget
 class SwipeButton extends StatefulWidget {
   final VoidCallback onSwipeComplete;
   final String text;
-  const SwipeButton({super.key, required this.onSwipeComplete, required this.text});
+  
+  const SwipeButton({
+    super.key, 
+    required this.onSwipeComplete, 
+    required this.text
+  });
 
   @override
   State<SwipeButton> createState() => _SwipeButtonState();
@@ -396,13 +482,14 @@ class _SwipeButtonState extends State<SwipeButton> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double maxPosition = constraints.maxWidth - 60; // 60 is the button size
+        final double maxPosition = constraints.maxWidth - 58; // 58 is the button diameter (60 - padding)
         return Container(
           height: 60,
+          padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.15),
+            color: Colors.emerald.withOpacity(0.08),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.green.withOpacity(0.35)),
+            border: Border.all(color: Colors.emerald.withOpacity(0.18)),
           ),
           child: Stack(
             children: [
@@ -410,16 +497,16 @@ class _SwipeButtonState extends State<SwipeButton> {
                 child: Text(
                   widget.text,
                   style: const TextStyle(
-                    color: Colors.green,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 15,
+                    color: Colors.emeraldAccent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
                   ),
                 ),
               ),
               Positioned(
                 left: _position,
-                top: 1,
-                bottom: 1,
+                top: 0,
+                bottom: 0,
                 child: GestureDetector(
                   onHorizontalDragUpdate: (details) {
                     if (_isFinished) return;
@@ -444,15 +531,24 @@ class _SwipeButtonState extends State<SwipeButton> {
                     }
                   },
                   child: Container(
-                    width: 58,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.emeraldAccent, Colors.teal],
+                      ),
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.emerald.withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
                     child: const Icon(
                       Icons.arrow_forward_ios_rounded,
                       color: Colors.white,
-                      size: 20,
+                      size: 18,
                     ),
                   ),
                 ),

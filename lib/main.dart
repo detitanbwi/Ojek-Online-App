@@ -139,6 +139,14 @@ class _MyAppState extends State<MyApp> {
           destination: additionalData['destination']?.toString() ?? 'Unknown',
           price: additionalData['price']?.toString() ?? '0',
         );
+
+        // Immediately navigate to the full screen page since app is in foreground
+        navigateToOrderRequest(
+          orderId: additionalData['order_id']?.toString() ?? '0',
+          origin: additionalData['origin']?.toString() ?? 'Unknown',
+          destination: additionalData['destination']?.toString() ?? 'Unknown',
+          price: additionalData['price']?.toString() ?? '0',
+        );
       }
     });
 
