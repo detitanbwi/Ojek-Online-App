@@ -480,6 +480,9 @@ class _SwipeButtonState extends State<SwipeButton> {
 
   @override
   Widget build(BuildContext context) {
+    const Color emeraldColor = Color(0xFF10B981);
+    const Color emeraldAccentColor = Color(0xFF34D399);
+    
     return LayoutBuilder(
       builder: (context, constraints) {
         final double maxPosition = constraints.maxWidth - 58; // 58 is the button diameter (60 - padding)
@@ -487,9 +490,9 @@ class _SwipeButtonState extends State<SwipeButton> {
           height: 60,
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: Colors.emerald.withOpacity(0.08),
+            color: emeraldColor.withOpacity(0.08),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.emerald.withOpacity(0.18)),
+            border: Border.all(color: emeraldColor.withOpacity(0.18)),
           ),
           child: Stack(
             children: [
@@ -497,7 +500,7 @@ class _SwipeButtonState extends State<SwipeButton> {
                 child: Text(
                   widget.text,
                   style: const TextStyle(
-                    color: Colors.emeraldAccent,
+                    color: emeraldAccentColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
@@ -534,12 +537,12 @@ class _SwipeButtonState extends State<SwipeButton> {
                     width: 52,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Colors.emeraldAccent, Colors.teal],
+                        colors: [emeraldAccentColor, Colors.teal],
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.emerald.withOpacity(0.4),
+                          color: emeraldColor.withOpacity(0.4),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
