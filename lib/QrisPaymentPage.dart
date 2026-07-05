@@ -222,7 +222,7 @@ class _QrisPaymentPageState extends State<QrisPaymentPage> {
                   style: TextStyle(color: Colors.white54, fontSize: 13),
                 ),
               ] else if (_errorMessage != null) ...[
-                const Icon(Icons.error_outline, color: Colors.roseAccent, size: 80),
+                const Icon(Icons.error_outline, color: Colors.redAccent, size: 80),
                 const SizedBox(height: 16),
                 Text(
                   _errorMessage!,

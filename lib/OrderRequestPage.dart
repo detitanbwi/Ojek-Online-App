@@ -493,7 +493,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           Text(
                                             _paymentType == 'qris' ? '📱 QRIS (Midtrans)' : '💵 Tunai (Cash)',
                                             style: TextStyle(
-                                              color: _paymentType == 'qris' ? Colors.indigoAccent.shade100 : Colors.emeraldAccent.shade100, 
+                                              color: _paymentType == 'qris' ? Colors.indigoAccent.shade100 : Colors.greenAccent.shade100, 
                                               fontSize: 14, 
                                               fontWeight: FontWeight.bold
                                             ),
@@ -650,7 +650,7 @@ class _SwipeButtonState extends State<SwipeButton> {
 
   @override
   Widget build(BuildContext context) {
-    final startC = widget.colorStart ?? Colors.emeraldAccent;
+    final startC = widget.colorStart ?? Colors.greenAccent;
     final endC = widget.colorEnd ?? Colors.teal;
 
     return LayoutBuilder(
@@ -670,7 +670,7 @@ class _SwipeButtonState extends State<SwipeButton> {
                 child: Text(
                   widget.text,
                   style: TextStyle(
-                    color: widget.colorStart != null ? Colors.indigoAccent.shade100 : Colors.emeraldAccent,
+                    color: widget.colorStart != null ? Colors.indigoAccent.shade100 : Colors.greenAccent,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
