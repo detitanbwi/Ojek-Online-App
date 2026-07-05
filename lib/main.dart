@@ -324,6 +324,42 @@ class _DriverHomePageState extends State<DriverHomePage> {
   }
 
   Future<void> setDriverOnline() async {
+    // Check overlay permission first
+    const platform = MethodChannel('com.wirodev.ojol/intent');
+    try {
+      final bool hasOverlayPermission = await platform.invokeMethod('checkOverlayPermission');
+      if (!hasOverlayPermission && mounted) {
+        final bool? grant = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Text('Izin Tambahan Diperlukan'),
+            content: const Text(
+              'Agar layar orderan masuk dapat otomatis muncul penuh saat Anda sedang membuka aplikasi lain, mohon aktifkan izin "Tampilkan di atas aplikasi lain" untuk aplikasi ini.'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Nanti Saja'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Aktifkan Sekarang'),
+              ),
+            ],
+          ),
+        );
+        
+        if (grant == true) {
+          await platform.invokeMethod('requestOverlayPermission');
+          return; // Stop here, let them authorize and set online again
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking overlay permission: $e");
+    }
+
     setState(() {
       isLoading = true;
     });
