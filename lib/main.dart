@@ -556,15 +556,20 @@ class _DriverHomePageState extends State<DriverHomePage> {
       );
 
       final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
+      final bool isDriverNotFound = response.statusCode == 404 || (result != null && result['message'] == 'Driver not found.');
+
+      if ((response.statusCode == 200 && result['success'] == true) || isDriverNotFound) {
         setState(() {
           isOnline = false;
           activeOrder = null;
+          driverBalance = 0.0;
         });
         saveState(online: false, name: driverName, phone: driverPhone, id: driverId);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Status driver sekarang OFFLINE!'),
+          SnackBar(
+            content: Text(isDriverNotFound 
+                ? 'Driver tidak ditemukan di database. Mengatur status ke offline.' 
+                : 'Status driver sekarang OFFLINE!'),
             backgroundColor: Colors.grey,
           ),
         );
