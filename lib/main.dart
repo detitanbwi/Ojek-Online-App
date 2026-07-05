@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'OrderRequestPage.dart';
 
 // Global navigator key to handle navigation from background/global notification events
@@ -298,6 +299,36 @@ class _DriverHomePageState extends State<DriverHomePage> {
     _phoneController.text = driverPhone;
     _nameController.text = driverName;
     _urlController.text = backendUrl;
+    
+    // Load persisted driver online state and details
+    loadSavedState();
+  }
+
+  void loadSavedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      isOnline = prefs.getBool('is_online') ?? false;
+      driverName = prefs.getString('driver_name') ?? 'Wiro Sableng';
+      driverPhone = prefs.getString('driver_phone') ?? '081234567890';
+      _nameController.text = driverName;
+      _phoneController.text = driverPhone;
+      
+      // Update global backendUrl if stored
+      final storedUrl = prefs.getString('backend_url');
+      if (storedUrl != null && storedUrl.isNotEmpty) {
+        backendUrl = storedUrl;
+        _urlController.text = backendUrl;
+      }
+    });
+  }
+
+  void saveState({required bool online, required String name, required String phone}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_online', online);
+    await prefs.setString('driver_name', name);
+    await prefs.setString('driver_phone', phone);
+    await prefs.setString('backend_url', backendUrl);
+  }
     fetchOneSignalId();
     setupOneSignalObserver();
   }
@@ -397,6 +428,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
           driverName = result['data']['name'];
           driverPhone = result['data']['phone'];
         });
+        saveState(online: true, name: driverName, phone: driverPhone);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Status driver online & terdaftar!'),
@@ -411,6 +443,55 @@ class _DriverHomePageState extends State<DriverHomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMsg),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> setDriverOffline() async {
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      backendUrl = _urlController.text.trim();
+      final response = await http.post(
+        Uri.parse('$backendUrl/driver/logout'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'phone': _phoneController.text.trim(),
+        }),
+      );
+
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success'] == true) {
+        setState(() {
+          isOnline = false;
+        });
+        saveState(online: false, name: driverName, phone: driverPhone);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Status driver sekarang OFFLINE!'),
+            backgroundColor: Colors.grey,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['message'] ?? 'Gagal menghubungi server'),
             backgroundColor: Colors.red,
           ),
         );
@@ -516,6 +597,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _nameController,
+                        enabled: !isOnline,
                         decoration: InputDecoration(
                           labelText: 'Nama Driver',
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
@@ -525,6 +607,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _phoneController,
+                        enabled: !isOnline,
                         keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
                           labelText: 'No. Handphone',
@@ -574,14 +657,16 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
               // 4. Action Button
               ElevatedButton(
-                onPressed: isLoading ? null : setDriverOnline,
+                onPressed: isLoading
+                    ? null
+                    : (isOnline ? setDriverOffline : setDriverOnline),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFCC5900),
+                  backgroundColor: isOnline ? Colors.redAccent : const Color(0xFFCC5900),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   elevation: 6,
-                  shadowColor: const Color(0xFFCC5900).withOpacity(0.4),
+                  shadowColor: (isOnline ? Colors.redAccent : const Color(0xFFCC5900)).withOpacity(0.4),
                 ),
                 child: isLoading
                     ? const SizedBox(
@@ -589,9 +674,9 @@ class _DriverHomePageState extends State<DriverHomePage> {
                         width: 24,
                         child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
                       )
-                    : const Text(
-                        'Aktifkan & Set Online',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                    : Text(
+                        isOnline ? 'Matikan & Set Offline' : 'Aktifkan & Set Online',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                       ),
               ),
               const SizedBox(height: 12),
