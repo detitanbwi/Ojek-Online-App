@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -8,10 +9,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'OrderRequestPage.dart';
 
+import 'WelcomeScreen.dart';
+import 'LoginScreen.dart';
+
 // Global navigator key to handle navigation from background/global notification events
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// Key-value memory to persist custom backend URL during runtime (can be customized in UI)
+// Key-value memory to persist custom backend URL during runtime
 String backendUrl = 'https://ojek.wirodev.com/api';
 
 void main() async {
@@ -90,7 +94,12 @@ class _MyAppState extends State<MyApp> {
     checkInitialIntent();
   }
 
-  static const platform = MethodChannel('com.wirodev.ojol/intent');
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  static const platform = MethodChannel('com.wirodev.wirojek/intent');
 
   void checkInitialIntent() async {
     try {
@@ -121,6 +130,8 @@ class _MyAppState extends State<MyApp> {
       price: orderData['price']?.toString() ?? '0',
       passengerName: orderData['passenger_name']?.toString() ?? 'Penumpang',
       paymentType: orderData['payment_type']?.toString() ?? 'cash',
+      adminFee: orderData['admin_fee']?.toString(),
+      driverFare: orderData['driver_fare']?.toString(),
     );
   }
 
@@ -133,6 +144,8 @@ class _MyAppState extends State<MyApp> {
     String? passengerName,
     String? paymentType,
     String? status,
+    String? adminFee,
+    String? driverFare,
   }) {
     if (currentOpenOrderId == orderId) {
       debugPrint("Order page for ID $orderId is already open. Skipping duplicate push.");
@@ -151,6 +164,8 @@ class _MyAppState extends State<MyApp> {
           passengerName: passengerName,
           paymentType: paymentType,
           status: status,
+          adminFee: adminFee,
+          driverFare: driverFare,
         ),
       ),
     ).then((_) {
@@ -183,7 +198,7 @@ class _MyAppState extends State<MyApp> {
           destination: additionalData['destination']?.toString() ?? 'Unknown',
           price: additionalData['price']?.toString() ?? '0',
           passengerName: additionalData['passenger_name']?.toString() ?? 'Penumpang',
-          paymentType: additionalData['payment_type']?.toString() ?? 'cash',
+          paymentType: additionalData['passenger_name']?.toString() ?? 'cash',
         );
       }
     });
@@ -249,7 +264,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Ojol Driver',
+      title: 'WiroJek Driver',
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -261,7 +276,7 @@ class _MyAppState extends State<MyApp> {
         useMaterial3: true,
         fontFamily: 'Inter',
       ),
-      home: const DriverHomePage(),
+      home: const WelcomeScreen(),
     );
   }
 }
@@ -298,11 +313,18 @@ class _DriverHomePageState extends State<DriverHomePage> {
   bool isOnline = false;
   String oneSignalId = 'Loading OneSignal...';
   String driverPhone = '081234567890';
+  String driverEmail = 'driver@wirojek.com';
   String driverName = 'Wiro Sableng';
   String driverId = 'DRV-0001';
   bool isLoading = false;
   double driverBalance = 0.0;
   
+  // Theme Mode
+  bool isDarkMode = true;
+
+  // Bottom Navigation Index
+  int _selectedIndex = 0;
+
   // Order history & active order state
   List<dynamic> historyOrders = [];
   Map<String, dynamic>? activeOrder;
@@ -312,14 +334,12 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _urlController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _phoneController.text = driverPhone;
     _nameController.text = driverName;
-    _urlController.text = backendUrl;
     
     // Load persisted driver online state and details
     loadSavedState();
@@ -339,15 +359,11 @@ class _DriverHomePageState extends State<DriverHomePage> {
       isOnline = prefs.getBool('is_online') ?? false;
       driverName = prefs.getString('driver_name') ?? 'Wiro Sableng';
       driverPhone = prefs.getString('driver_phone') ?? '081234567890';
+      driverEmail = prefs.getString('driver_email') ?? 'driver@wirojek.com';
       driverId = prefs.getString('driver_id') ?? 'DRV-0001';
+      isDarkMode = prefs.getBool('is_dark_mode') ?? true;
       _nameController.text = driverName;
       _phoneController.text = driverPhone;
-      
-      final storedUrl = prefs.getString('backend_url');
-      if (storedUrl != null && storedUrl.isNotEmpty) {
-        backendUrl = storedUrl;
-        _urlController.text = backendUrl;
-      }
     });
 
     if (isOnline) {
@@ -355,6 +371,42 @@ class _DriverHomePageState extends State<DriverHomePage> {
       checkActiveOrder();
       fetchDriverProfile();
       startSyncTimer();
+    }
+  }
+
+  void saveState({required bool online, required String name, required String phone, required String email, required String id}) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_online', online);
+    await prefs.setString('driver_name', name);
+    await prefs.setString('driver_phone', phone);
+    await prefs.setString('driver_email', email);
+    await prefs.setString('driver_id', id);
+  }
+
+  void toggleTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      isDarkMode = !isDarkMode;
+    });
+    await prefs.setBool('is_dark_mode', isDarkMode);
+  }
+
+  void setupOneSignalObserver() {
+    OneSignal.User.pushSubscription.addObserver((state) {
+      if (mounted) {
+        setState(() {
+          oneSignalId = state.current.id ?? 'Belum terdaftar';
+        });
+      }
+    });
+  }
+
+  void fetchOneSignalId() {
+    String? id = OneSignal.User.pushSubscription.id;
+    if (id != null && id.isNotEmpty) {
+      setState(() {
+        oneSignalId = id;
+      });
     }
   }
 
@@ -377,7 +429,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   Future<void> checkDriverStatusOnline() async {
     try {
       final response = await http.get(
-        Uri.parse('$backendUrl/driver/profile?phone=$driverPhone'),
+        Uri.parse('$backendUrl/driver/profile?email=$driverEmail'),
       );
       final result = jsonDecode(response.body);
       if (response.statusCode == 200 && result['success'] == true) {
@@ -390,7 +442,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
             activeOrder = null;
             driverBalance = 0.0;
           });
-          saveState(online: false, name: driverName, phone: driverPhone, id: driverId);
+          saveState(online: false, name: driverName, phone: driverPhone, email: driverEmail, id: driverId);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Koneksi Anda telah diputus (detached) oleh Admin.'),
@@ -408,57 +460,10 @@ class _DriverHomePageState extends State<DriverHomePage> {
     }
   }
 
-  Future<void> fetchDriverProfile() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$backendUrl/driver/profile?phone=$driverPhone'),
-      );
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
-        setState(() {
-          driverBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
-          driverName = result['data']['name'];
-          driverPhone = result['data']['phone'];
-          driverId = 'DRV-' + result['data']['id'].toString().padLeft(4, '0');
-        });
-      }
-    } catch (e) {
-      debugPrint("Error fetching profile: $e");
-    }
-  }
-
-  void saveState({required bool online, required String name, required String phone, required String id}) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_online', online);
-    await prefs.setString('driver_name', name);
-    await prefs.setString('driver_phone', phone);
-    await prefs.setString('driver_id', id);
-    await prefs.setString('backend_url', backendUrl);
-  }
-
-  void setupOneSignalObserver() {
-    OneSignal.User.pushSubscription.addObserver((state) {
-      if (mounted) {
-        setState(() {
-          oneSignalId = state.current.id ?? 'Belum terdaftar (pastikan internet aktif)';
-        });
-      }
-    });
-  }
-
-  void fetchOneSignalId() {
-    String? id = OneSignal.User.pushSubscription.id;
-    if (id != null && id.isNotEmpty) {
-      setState(() {
-        oneSignalId = id;
-      });
-    }
-  }
-
   Future<void> checkActiveOrder() async {
     try {
       final response = await http.get(
-        Uri.parse('$backendUrl/driver/order/active?phone=$driverPhone'),
+        Uri.parse('$backendUrl/driver/order/active?email=$driverEmail'),
       );
       final result = jsonDecode(response.body);
       if (response.statusCode == 200 && result['success'] == true) {
@@ -478,7 +483,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
     try {
       final response = await http.get(
-        Uri.parse('$backendUrl/driver/orders?phone=$driverPhone'),
+        Uri.parse('$backendUrl/driver/orders?email=$driverEmail'),
       );
       final result = jsonDecode(response.body);
       if (response.statusCode == 200 && result['success'] == true) {
@@ -495,9 +500,28 @@ class _DriverHomePageState extends State<DriverHomePage> {
     }
   }
 
+  Future<void> fetchDriverProfile() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$backendUrl/driver/profile?email=$driverEmail'),
+      );
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success'] == true) {
+        setState(() {
+          driverBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
+          driverName = result['data']['name'];
+          driverPhone = result['data']['phone'];
+          driverEmail = result['data']['email'];
+          driverId = 'DRV-' + result['data']['id'].toString().padLeft(4, '0');
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching profile: $e");
+    }
+  }
+
   Future<void> setDriverOnline() async {
-    // Check overlay permission first
-    const platform = MethodChannel('com.wirodev.ojol/intent');
+    const platform = MethodChannel('com.wirodev.wirojek/intent');
     try {
       final bool hasOverlayPermission = await platform.invokeMethod('checkOverlayPermission');
       if (!hasOverlayPermission && mounted) {
@@ -551,13 +575,11 @@ class _DriverHomePageState extends State<DriverHomePage> {
     }
 
     try {
-      backendUrl = _urlController.text.trim();
       final response = await http.post(
-        Uri.parse('$backendUrl/driver/login'),
+        Uri.parse('$backendUrl/driver/set-online'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'phone': _phoneController.text.trim(),
-          'name': _nameController.text.trim(),
+          'email': driverEmail,
           'onesignal_player_id': playerId,
         }),
       );
@@ -569,13 +591,15 @@ class _DriverHomePageState extends State<DriverHomePage> {
           isOnline = true;
           driverName = result['data']['name'];
           driverPhone = result['data']['phone'];
+          driverEmail = result['data']['email'];
           driverId = dbId;
         });
-        saveState(online: true, name: driverName, phone: driverPhone, id: driverId);
+        saveState(online: true, name: driverName, phone: driverPhone, email: driverEmail, id: driverId);
         
         // Load active and history data
         fetchOrderHistory();
         checkActiveOrder();
+        fetchDriverProfile();
         startSyncTimer();
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -606,12 +630,11 @@ class _DriverHomePageState extends State<DriverHomePage> {
     });
 
     try {
-      backendUrl = _urlController.text.trim();
       final response = await http.post(
         Uri.parse('$backendUrl/driver/logout'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'phone': _phoneController.text.trim(),
+          'email': driverEmail,
         }),
       );
 
@@ -625,7 +648,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
           activeOrder = null;
           driverBalance = 0.0;
         });
-        saveState(online: false, name: driverName, phone: driverPhone, id: driverId);
+        saveState(online: false, name: driverName, phone: driverPhone, email: driverEmail, id: driverId);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(isDriverNotFound 
@@ -664,6 +687,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
           status: activeOrder!['status'],
           passengerName: activeOrder!['passenger_name'],
           paymentType: activeOrder!['payment_type'],
+          adminFee: activeOrder!['admin_fee']?.toString().split('.')[0],
+          driverFare: activeOrder!['driver_fare']?.toString().split('.')[0],
         ),
       ),
     );
@@ -675,6 +700,24 @@ class _DriverHomePageState extends State<DriverHomePage> {
     }
   }
 
+  void openHistoryDetailScreen(Map<String, dynamic> order) {
+    navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (context) => OrderRequestPage(
+          orderId: order['id'].toString(),
+          origin: order['origin'],
+          destination: order['destination'],
+          price: order['price'].toString().split('.')[0],
+          status: order['status'],
+          passengerName: order['passenger_name'],
+          paymentType: order['payment_type'],
+          adminFee: order['admin_fee']?.toString().split('.')[0],
+          driverFare: order['driver_fare']?.toString().split('.')[0],
+        ),
+      ),
+    );
+  }
+
   String formatPrice(String price) {
     final intVal = int.tryParse(price.replaceAll('.', ''));
     if (intVal == null) return price;
@@ -682,295 +725,278 @@ class _DriverHomePageState extends State<DriverHomePage> {
     return intVal.toString().replaceAllMapped(reg, (Match m) => '${m[1]}.');
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A), // Slate 900 for premium dark theme
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 0,
-        title: const Text(
-          'OJOL DRIVER DASHBOARD',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white70),
-            onPressed: showSettingsDialog,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white70),
-            onPressed: () {
-              if (isOnline) {
-                fetchOrderHistory();
-                checkActiveOrder();
-                fetchDriverProfile();
-              }
-            },
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 1. Profile and Online/Offline Toggle Header Card
-            Container(
-              padding: const EdgeInsets.all(20.0),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1E293B),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      // Avatar
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: isOnline ? Colors.green.withOpacity(0.1) : Colors.white10,
-                        child: Icon(
-                          Icons.person,
-                          color: isOnline ? Colors.greenAccent : Colors.white54,
-                          size: 32,
-                        ),
+  // Dashboard Tab Content Widget
+  Widget buildDashboardTab(Color titleColor, Color subTitleColor, Color cardBg, Color dividerColor) {
+    return Column(
+      children: [
+        // 1. Profile and Online/Offline Toggle Header Card (Styled as a premium Elevated Blue Card)
+        Card(
+          margin: const EdgeInsets.only(left: 20, right: 20, top: 16),
+          elevation: 6,
+          shadowColor: const Color(0xFF1E3A8A).withOpacity(0.15),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Stack(
+              children: [
+                // Premium Dark Blue Gradient Background (Spans full height dynamically)
+                Positioned.fill(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)], // Dark Navy Slate to Indigo Blue
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      const SizedBox(width: 16),
-                      // Details
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              driverName,
-                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              driverPhone,
-                              style: const TextStyle(color: Colors.white54, fontSize: 13),
-                            ),
-                            if (isOnline) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(Icons.account_balance_wallet, color: Colors.amber, size: 14),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Saldo: Rp ${formatPrice(driverBalance.toString().split('.')[0])}',
-                                    style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      // Driver ID Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                        ),
-                        child: Text(
-                          driverId,
-                          style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.w800, fontFamily: 'monospace'),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  
-                  const SizedBox(height: 20),
-                  const Divider(color: Colors.white10),
-                  const SizedBox(height: 8),
-                  
-                  // Online/Offline Toggle Switch Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ),
+                // Subtle transparent design overlapping circles (matching uploaded image aesthetics)
+                Positioned(
+                  right: -40,
+                  top: -40,
+                  child: Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.04),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 20,
+                  bottom: -60,
+                  child: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.02),
+                    ),
+                  ),
+                ),
+                // Blue Card content elements
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
                     children: [
                       Row(
                         children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: isOnline ? Colors.greenAccent : Colors.white24,
+                          // Avatar
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Colors.white.withOpacity(0.12),
+                            child: const Icon(
+                              Icons.person,
+                              color: Colors.white,
+                              size: 32,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            isOnline ? 'ONLINE & SIAP MENERIMA ORDER' : 'OFFLINE (TIDAK AKTIF)',
-                            style: TextStyle(
-                              color: isOnline ? Colors.greenAccent : Colors.white38,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                          const SizedBox(width: 16),
+                          // Details
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  driverName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.account_balance_wallet_rounded, color: Colors.amber, size: 16),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isOnline 
+                                          ? 'Saldo: Rp ${formatPrice(driverBalance.toString().split('.')[0])}'
+                                          : 'Offline - Saldo Terkunci',
+                                      style: const TextStyle(
+                                        color: Colors.amber, // Clear Gold Text on Blue Card is highly readable
+                                        fontSize: 14, 
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                      isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.amber),
-                            )
-                          : Switch(
-                              value: isOnline,
-                              activeColor: Colors.greenAccent,
-                              activeTrackColor: Colors.green.withOpacity(0.2),
-                              inactiveThumbColor: Colors.white30,
-                              inactiveTrackColor: Colors.white10,
-                              onChanged: (val) {
-                                if (val) {
-                                  setDriverOnline();
-                                } else {
-                                  setDriverOffline();
-                                }
-                              },
-                            ),
+                      
+                      const SizedBox(height: 18),
+                      Divider(color: Colors.white.withOpacity(0.08)),
+                      const SizedBox(height: 6),
+                      
+                      // Online/Offline Toggle Switch Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isOnline ? Colors.greenAccent : Colors.white24,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isOnline ? 'ONLINE & SIAP MENERIMA ORDER' : 'OFFLINE (TIDAK AKTIF)',
+                                style: TextStyle(
+                                  color: isOnline ? Colors.greenAccent : Colors.white54,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                          isLoading
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.amber),
+                                )
+                              : Switch(
+                                  value: isOnline,
+                                  activeColor: Colors.greenAccent,
+                                  activeTrackColor: Colors.green.withOpacity(0.2),
+                                  inactiveThumbColor: Colors.white30,
+                                  inactiveTrackColor: Colors.white10,
+                                  onChanged: (val) {
+                                    if (val) {
+                                      setDriverOnline();
+                                    } else {
+                                      setDriverOffline();
+                                    }
+                                  },
+                                ),
+                        ],
+                      ),
                     ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        // 2. Active Order Banner / Dropcard (Pulsing card)
+        if (isOnline && activeOrder != null && activeOrder!['status'] == 'accepted') ...[
+          GestureDetector(
+            onTap: openActiveOrderScreen,
+            child: Container(
+              margin: const EdgeInsets.only(left: 20, right: 20, top: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)], // Dark Blue Gradient
+                ),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blueAccent.withOpacity(0.15),
+                    blurRadius: 10,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
-            ),
-            
-            // 2. Active Order Banner / Dropcard (Pulsing card)
-            if (isOnline && activeOrder != null && activeOrder!['status'] == 'accepted') ...[
-              GestureDetector(
-                onTap: openActiveOrderScreen,
-                child: Container(
-                  margin: const EdgeInsets.only(left: 20, right: 20, top: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)], // Dark Blue Gradient
+              child: Row(
+                children: [
+                  const Icon(Icons.stars, color: Colors.amber, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'PESANAN SEDANG BERJALAN',
+                          style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Tarif: Rp ${formatPrice(activeOrder!['price'].toString().split('.')[0])} (${activeOrder!['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'})',
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Ke: ${activeOrder!['destination']}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white54, fontSize: 11),
+                        ),
+                      ],
                     ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blueAccent.withOpacity(0.15),
-                        blurRadius: 10,
-                        spreadRadius: 2,
-                      ),
-                    ],
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.stars, color: Colors.amber, size: 28),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'PESANAN SEDANG BERJALAN',
-                              style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Tarif: Rp ${formatPrice(activeOrder!['price'].toString().split('.')[0])} (${activeOrder!['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'})',
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Ke: ${activeOrder!['destination']}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white54, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
-                    ],
-                  ),
-                ),
+                  const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+                ],
               ),
-            ],
+            ),
+          ),
+        ],
 
-            const SizedBox(height: 20),
+        const SizedBox(height: 20),
 
-            // 3. Driver Info / Settings (Only visible when offline)
-            if (!isOnline) ...[
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.white.withOpacity(0.04)),
+        // 3. Main Dashboard body listing history if online, or elegant placeholder if offline
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            child: !isOnline
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.power_settings_new_rounded,
+                          size: 64,
+                          color: subTitleColor.withOpacity(0.2),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'PENGATURAN AKUN',
-                              style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _nameController,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                labelText: 'Nama Lengkap',
-                                labelStyle: const TextStyle(color: Colors.white54),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white24)),
-                                prefixIcon: const Icon(Icons.person, color: Colors.white54),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _phoneController,
-                              style: const TextStyle(color: Colors.white),
-                              keyboardType: TextInputType.phone,
-                              decoration: InputDecoration(
-                                labelText: 'No. Handphone',
-                                labelStyle: const TextStyle(color: Colors.white54),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white24)),
-                                prefixIcon: const Icon(Icons.phone, color: Colors.white54),
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 16),
+                        Text(
+                          'Anda Sedang Offline',
+                          style: TextStyle(
+                            color: titleColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ),
-                ),
-              ),
-            ] else ...[
-              // 4. Order History List (Visible when online)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
+                        const SizedBox(height: 6),
+                        Text(
+                          'Aktifkan switch Online di atas untuk mulai menerima pesanan ojek.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: subTitleColor.withOpacity(0.7),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
+                          Text(
                             'RIWAYAT ORDERAN TERKINI',
-                            style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
+                            style: TextStyle(color: subTitleColor, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
                           ),
                           if (_loadingHistory)
-                            const SizedBox(
+                            SizedBox(
                               width: 12,
                               height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: titleColor),
                             ),
                         ],
                       ),
@@ -979,8 +1005,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
                         child: _loadingHistory && historyOrders.isEmpty
                           ? const Center(child: CircularProgressIndicator(color: Colors.amber))
                           : historyOrders.isEmpty
-                            ? const Center(
-                                child: Text('Belum ada riwayat orderan.', style: TextStyle(color: Colors.white30)),
+                            ? Center(
+                                child: Text('Belum ada riwayat orderan.', style: TextStyle(color: subTitleColor.withOpacity(0.5))),
                               )
                             : ListView.builder(
                                 physics: const BouncingScrollPhysics(),
@@ -990,60 +1016,63 @@ class _DriverHomePageState extends State<DriverHomePage> {
                                   final bool isCompleted = order['status'] == 'completed';
                                   final bool isCancelled = order['status'] == 'cancelled' || order['status'] == 'rejected';
                                   
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1E293B),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: Colors.white.withOpacity(0.02)),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // Status Icon
-                                        CircleAvatar(
-                                          radius: 18,
-                                          backgroundColor: isCompleted 
-                                              ? Colors.green.withOpacity(0.1) 
-                                              : (isCancelled ? Colors.red.withOpacity(0.1) : Colors.amber.withOpacity(0.1)),
-                                          child: Icon(
-                                            isCompleted 
-                                                ? Icons.check 
-                                                : (isCancelled ? Icons.close : Icons.access_time),
-                                            color: isCompleted 
-                                                ? Colors.greenAccent 
-                                                : (isCancelled ? Colors.redAccent : Colors.amberAccent),
-                                            size: 18,
+                                  return GestureDetector(
+                                    onTap: () => openHistoryDetailScreen(order),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: cardBg,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(color: dividerColor),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          // Status Icon
+                                          CircleAvatar(
+                                            radius: 18,
+                                            backgroundColor: isCompleted 
+                                                ? Colors.green.withOpacity(0.1) 
+                                                : (isCancelled ? Colors.red.withOpacity(0.1) : Colors.amber.withOpacity(0.1)),
+                                            child: Icon(
+                                              isCompleted 
+                                                  ? Icons.check 
+                                                  : (isCancelled ? Icons.close : Icons.access_time),
+                                              color: isCompleted 
+                                                  ? Colors.greenAccent 
+                                                  : (isCancelled ? Colors.redAccent : Colors.amberAccent),
+                                              size: 18,
+                                            ),
                                           ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        
-                                        // Text Details
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'Order #${order['id']} - ${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'}',
-                                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                'Ke: ${order['destination']}',
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(color: Colors.white30, fontSize: 11),
-                                              ),
-                                            ],
+                                          const SizedBox(width: 12),
+                                          
+                                          // Text Details
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Order #${order['id']} - ${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'}',
+                                                  style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  'Ke: ${order['destination']}',
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(color: subTitleColor, fontSize: 11),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        
-                                        // Price
-                                        Text(
-                                          'Rp ${formatPrice(order['price'].toString().split('.')[0])}',
-                                          style: const TextStyle(color: Colors.amber, fontSize: 14, fontWeight: FontWeight.bold),
-                                        ),
-                                      ],
+                                          
+                                          // Price
+                                          Text(
+                                            'Rp ${formatPrice(order['price'].toString().split('.')[0])}',
+                                            style: const TextStyle(color: Colors.amber, fontSize: 14, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   );
                                 },
@@ -1051,59 +1080,263 @@ class _DriverHomePageState extends State<DriverHomePage> {
                       ),
                     ],
                   ),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
+      ],
+    );
+  }
+
+  // Profile Tab Content Widget
+  Widget buildProfileTab(Color titleColor, Color subTitleColor, Color cardBg, Color dividerColor) {
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header layout with driver avatar and ID Badge
+          Center(
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 38,
+                  backgroundColor: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
+                  child: Icon(
+                    Icons.person,
+                    color: isDarkMode ? Colors.white70 : Colors.black87,
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  driverName,
+                  style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                // Driver ID Badge (Moved here to clear Dashboard card)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    'Driver ID: $driverId',
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.amber : Colors.amber.shade900, 
+                      fontSize: 13, 
+                      fontWeight: FontWeight.w800, 
+                      fontFamily: 'monospace'
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Profile Details Card Form (Read only with clean display)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: dividerColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'INFORMASI AKUN',
+                  style: TextStyle(color: subTitleColor, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
+                ),
+                const SizedBox(height: 24),
+                
+                // Details row-by-row
+                buildDetailRow(Icons.person, 'Nama Lengkap', driverName, titleColor, subTitleColor),
+                const SizedBox(height: 16),
+                buildDetailRow(Icons.email, 'Alamat Email', driverEmail, titleColor, subTitleColor),
+                const SizedBox(height: 16),
+                buildDetailRow(Icons.phone, 'Nomor HP', driverPhone, titleColor, subTitleColor),
+                const SizedBox(height: 16),
+                buildDetailRow(Icons.account_balance_wallet, 'Saldo Dompet', 'Rp ' + formatPrice(driverBalance.toString().split('.')[0]), titleColor, subTitleColor),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Logout Button
+          ElevatedButton(
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  title: const Text('Keluar dari Akun?'),
+                  content: const Text('Anda tidak akan dapat menerima pesanan ojek online baru saat berada di luar akun.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Batal'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        performLogout();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.redAccent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: const Text('Keluar Akun'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent.withOpacity(0.1),
+              foregroundColor: Colors.redAccent,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Colors.redAccent, width: 1.5),
+              ),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.logout_rounded, size: 20),
+                SizedBox(width: 8),
+                Text('Keluar dari Aplikasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  void showSettingsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E293B),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: const Text('Config API Endpoint', style: TextStyle(color: Colors.white)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Ubah URL target backend agar sesuai dengan IP XAMPP Anda. Pastikan ada folder /public/api atau /api di ujungnya.',
-                style: TextStyle(fontSize: 12, color: Colors.white54),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _urlController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'API Base URL',
-                  labelStyle: const TextStyle(color: Colors.white54),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  backendUrl = _urlController.text.trim();
-                });
-                Navigator.pop(context);
-              },
-              child: const Text('Simpan'),
-            ),
+  void performLogout() async {
+    setState(() {
+      isLoading = true;
+    });
+    try {
+      await http.post(
+        Uri.parse('$backendUrl/driver/logout'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': driverEmail}),
+      );
+    } catch (e) {
+      debugPrint("API Logout error: $e");
+    }
+
+    // Reset local state
+    stopSyncTimer();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
+
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  Widget buildDetailRow(IconData icon, String label, String value, Color titleColor, Color subTitleColor) {
+    return Row(
+      children: [
+        Icon(icon, color: subTitleColor, size: 20),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(color: subTitleColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+            const SizedBox(height: 2),
+            Text(value, style: TextStyle(color: titleColor, fontSize: 14, fontWeight: FontWeight.w700)),
           ],
-        );
-      },
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Dynamic Theme colors
+    final Color scaffoldBg = isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF3F4F6);
+    final Color cardBg = isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color titleColor = isDarkMode ? Colors.white : const Color(0xFF1E293B);
+    final Color subTitleColor = isDarkMode ? Colors.white54 : Colors.black54;
+    final Color dividerColor = isDarkMode ? Colors.white10 : Colors.black12;
+
+    return Scaffold(
+      backgroundColor: scaffoldBg,
+      appBar: AppBar(
+        backgroundColor: cardBg,
+        elevation: 0,
+        title: Text(
+          _selectedIndex == 0 ? 'DASHBOARD DRIVER' : 'PROFIL AKUN',
+          style: TextStyle(color: titleColor, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.2),
+        ),
+        actions: [
+          // Theme Toggle Button
+          IconButton(
+            icon: Icon(
+              isDarkMode ? Icons.wb_sunny_rounded : Icons.nightlight_round,
+              color: isDarkMode ? Colors.amberAccent : Colors.indigoAccent,
+            ),
+            onPressed: toggleTheme,
+          ),
+          if (_selectedIndex == 0)
+            IconButton(
+              icon: Icon(Icons.refresh, color: isDarkMode ? Colors.white70 : Colors.black87),
+              onPressed: () {
+                if (isOnline) {
+                  fetchOrderHistory();
+                  checkActiveOrder();
+                  fetchDriverProfile();
+                }
+              },
+            ),
+        ],
+      ),
+      body: SafeArea(
+        child: _selectedIndex == 0 
+            ? buildDashboardTab(titleColor, subTitleColor, cardBg, dividerColor)
+            : buildProfileTab(titleColor, subTitleColor, cardBg, dividerColor),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        backgroundColor: cardBg,
+        selectedItemColor: Colors.amber.shade700,
+        unselectedItemColor: isDarkMode ? Colors.white30 : Colors.black38,
+        showUnselectedLabels: true,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+        unselectedLabelStyle: const TextStyle(fontSize: 11),
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_rounded),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_rounded),
+            label: 'Profil',
+          ),
+        ],
+      ),
     );
   }
 }

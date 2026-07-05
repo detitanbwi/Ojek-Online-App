@@ -1,4 +1,4 @@
-package com.wirodev.ojol
+package com.wirodev.wirojek
 
 import android.app.NotificationManager
 import android.content.BroadcastReceiver

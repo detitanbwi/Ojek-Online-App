@@ -1,4 +1,4 @@
-package com.wirodev.ojol
+package com.wirodev.wirojek
 
 import android.content.Context
 import android.app.NotificationManager
@@ -14,7 +14,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.wirodev.ojol/intent"
+    private val CHANNEL = "com.wirodev.wirojek/intent"
     private var orderData: Map<String, String>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,6 +100,27 @@ class MainActivity : FlutterActivity() {
             } else if (call.method == "requestOverlayPermission") {
                 requestOverlayPermission()
                 result.success(true)
+            } else if (call.method == "openNavigation") {
+                val destination = call.argument<String>("destination") ?: ""
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=" + Uri.encode(destination)))
+                    intent.setPackage("com.google.android.apps.maps")
+                    if (intent.resolveActivity(packageManager) != null) {
+                        startActivity(intent)
+                    } else {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=" + Uri.encode(destination)))
+                        startActivity(browserIntent)
+                    }
+                    result.success(true)
+                } catch (e: Exception) {
+                    try {
+                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/maps/search/?api=1&query=" + Uri.encode(destination)))
+                        startActivity(browserIntent)
+                        result.success(true)
+                    } catch (ex: Exception) {
+                        result.error("ERROR", ex.message, null)
+                    }
+                }
             } else {
                 result.notImplemented()
             }

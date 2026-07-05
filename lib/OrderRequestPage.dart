@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'QrisPaymentPage.dart';
 
 class OrderRequestPage extends StatefulWidget {
@@ -14,6 +15,8 @@ class OrderRequestPage extends StatefulWidget {
   final String? passengerName;
   final String? paymentType;
   final String? status;
+  final String? adminFee;
+  final String? driverFare;
 
   const OrderRequestPage({
     super.key,
@@ -25,6 +28,8 @@ class OrderRequestPage extends StatefulWidget {
     this.passengerName,
     this.paymentType,
     this.status,
+    this.adminFee,
+    this.driverFare,
   });
 
   @override
@@ -33,7 +38,7 @@ class OrderRequestPage extends StatefulWidget {
 
 class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
-  static const platform = MethodChannel('com.wirodev.ojol/intent');
+  static const platform = MethodChannel('com.wirodev.wirojek/intent');
   final String apiUrl = 'https://ojek.wirodev.com/api';
 
   Timer? _countdownTimer;
@@ -62,6 +67,9 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
       upperBound: 1.2,
     )..repeat(reverse: true);
 
+    // Check backend status of the order to override any outdated local intents (e.g. after restart)
+    checkActualStatus();
+
     // Only start countdown if order is still pending (incoming alert)
     if (_orderStatus == 'pending') {
       // Auto accept order if triggered from the notification banner "Ambil" button
@@ -73,6 +81,36 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
       startCountdown();
     } else {
       _pulseController.stop();
+    }
+  }
+
+  void checkActualStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = prefs.getString('driver_phone');
+    if (phone == null || phone.isEmpty) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse('$apiUrl/driver/order/active?phone=$phone'),
+      );
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success'] == true && result['data'] != null) {
+        final serverOrder = result['data'];
+        if (serverOrder['id'].toString() == widget.orderId) {
+          final serverStatus = serverOrder['status'];
+          if (serverStatus == 'accepted' && mounted) {
+            setState(() {
+              _orderStatus = 'accepted';
+              _paymentType = serverOrder['payment_type'];
+              _passengerName = serverOrder['passenger_name'];
+            });
+            _countdownTimer?.cancel();
+            _pulseController.stop();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking actual status: $e");
     }
   }
 
@@ -504,53 +542,139 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                   ],
                                 ),
 
+                                // Mid-trip Navigation and Payment switching buttons
+                                if (_orderStatus == 'accepted') ...[
+                                  const SizedBox(height: 24),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: () async {
+                                            try {
+                                              await platform.invokeMethod('openNavigation', {'destination': widget.destination});
+                                            } catch (e) {
+                                              debugPrint("Failed to launch maps navigation: $e");
+                                            }
+                                          },
+                                          icon: const Icon(Icons.navigation_rounded, size: 16),
+                                          label: const Text('Navigasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white.withOpacity(0.06),
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                            elevation: 0,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: () {
+                                            final nextType = _paymentType == 'qris' ? 'cash' : 'qris';
+                                            setState(() {
+                                              _paymentType = nextType;
+                                            });
+                                            // Sync payment type change to backend mid-trip
+                                            http.post(
+                                              Uri.parse('$apiUrl/driver/order/status'),
+                                              body: {
+                                                'order_id': widget.orderId,
+                                                'status': _orderStatus!,
+                                                'payment_type': nextType,
+                                              },
+                                            );
+                                          },
+                                          icon: Icon(_paymentType == 'qris' ? Icons.money : Icons.qr_code, size: 16),
+                                          label: Text(_paymentType == 'qris' ? 'Bayar Tunai' : 'Bayar QRIS', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.white.withOpacity(0.06),
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                            elevation: 0,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+
                                 const SizedBox(height: 24),
                                 
-                                // Glowing Amber Net Fare Box
+                                // Fare Breakdown Card
                                 Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                                  padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        Colors.amber.shade700.withOpacity(0.12),
-                                        Colors.amber.shade900.withOpacity(0.04),
+                                        Colors.amber.shade700.withOpacity(0.10),
+                                        Colors.amber.shade900.withOpacity(0.03),
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(color: Colors.amber.shade700.withOpacity(0.2)),
                                   ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  child: Column(
                                     children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                      // Customer pays
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'TARIF PENUMPANG',
+                                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                          ),
+                                          Text(
+                                            'Rp ${formatPrice(widget.price)}',
+                                            style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w700),
+                                          ),
+                                        ],
+                                      ),
+                                      if (widget.adminFee != null && widget.adminFee!.isNotEmpty && widget.adminFee != '0') ...[
+                                        const SizedBox(height: 10),
+                                        // Admin deduction
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              'TARIF BERSIH',
-                                              style: TextStyle(
-                                                color: Colors.amber.shade300,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.bold,
-                                                letterSpacing: 1.2,
-                                              ),
+                                              'POTONGAN ADMIN',
+                                              style: TextStyle(color: Colors.redAccent.withOpacity(0.7), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
                                             ),
-                                            const SizedBox(height: 2),
-                                            const Text(
-                                              'Pendapatan bersih Anda',
-                                              style: TextStyle(color: Colors.white38, fontSize: 10),
+                                            Text(
+                                              '- Rp ${formatPrice(widget.adminFee!)}',
+                                              style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w700),
                                             ),
                                           ],
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Rp ${formatPrice(widget.price)}',
-                                        style: const TextStyle(
-                                          color: Colors.amber,
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w900,
-                                        ),
+                                        const SizedBox(height: 12),
+                                        Divider(color: Colors.white.withOpacity(0.07), thickness: 1),
+                                        const SizedBox(height: 12),
+                                      ],
+                                      // Driver net earning
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'PENDAPATANMU',
+                                                style: TextStyle(color: Colors.amber.shade300, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                                              ),
+                                              const Text(
+                                                'Setelah potongan admin',
+                                                style: TextStyle(color: Colors.white38, fontSize: 9),
+                                              ),
+                                            ],
+                                          ),
+                                          Text(
+                                            'Rp ${formatPrice(widget.driverFare ?? widget.price)}',
+                                            style: const TextStyle(color: Colors.amber, fontSize: 26, fontWeight: FontWeight.w900),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -564,59 +688,60 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                   ),
                   
                   // Sticky bottom action buttons container (Decline & Swipe to accept/complete)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                    decoration: BoxDecoration(
-                      color: isPending ? const Color(0xFF0F172A).withOpacity(0.6) : const Color(0xFF060B26).withOpacity(0.8),
-                      border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (isPending) ...[
-                          // Swipe To Accept Button
-                          SwipeButton(
-                            text: "Geser ke kanan untuk Terima",
-                            onSwipeComplete: acceptOrder,
-                          ),
-                          const SizedBox(height: 12),
-                          // Elegant Reject button
-                          TextButton(
-                            onPressed: declineOrder,
-                            style: TextButton.styleFrom(
-                              foregroundColor: Colors.redAccent,
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                  if (isPending || _orderStatus == 'accepted')
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+                      decoration: BoxDecoration(
+                        color: isPending ? const Color(0xFF0F172A).withOpacity(0.6) : const Color(0xFF060B26).withOpacity(0.8),
+                        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isPending) ...[
+                            // Swipe To Accept Button
+                            SwipeButton(
+                              text: "Geser ke kanan untuk Terima",
+                              onSwipeComplete: acceptOrder,
                             ),
-                            child: Text(
-                              'LEWATKAN PESANAN',
-                              style: TextStyle(
-                                fontSize: 13, 
-                                fontWeight: FontWeight.w800, 
-                                color: Colors.redAccent.withOpacity(0.8),
-                                letterSpacing: 1.2
+                            const SizedBox(height: 12),
+                            // Elegant Reject button
+                            TextButton(
+                              onPressed: declineOrder,
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.redAccent,
+                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                              ),
+                              child: Text(
+                                'LEWATKAN PESANAN',
+                                style: TextStyle(
+                                  fontSize: 13, 
+                                  fontWeight: FontWeight.w800, 
+                                  color: Colors.redAccent.withOpacity(0.8),
+                                  letterSpacing: 1.2
+                                ),
                               ),
                             ),
-                          ),
-                        ] else ...[
-                          // Swipe To Complete Button for active trip
-                          SwipeButton(
-                            text: _paymentType == 'qris' 
-                                ? "Geser untuk Bayar QRIS" 
-                                : "Geser untuk Selesaikan Order",
-                            colorStart: Colors.blueAccent.shade400,
-                            colorEnd: Colors.indigoAccent.shade400,
-                            onSwipeComplete: completeOrder,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Pastikan penumpang telah berada di lokasi tujuan sebelum menyelesaikan orderan.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white30, fontSize: 10),
-                          ),
+                          ] else ...[
+                            // Swipe To Complete Button for active trip
+                            SwipeButton(
+                              text: _paymentType == 'qris' 
+                                  ? "Geser untuk Bayar QRIS" 
+                                  : "Geser untuk Selesaikan Order",
+                              colorStart: Colors.blueAccent.shade400,
+                              colorEnd: Colors.indigoAccent.shade400,
+                              onSwipeComplete: completeOrder,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Pastikan penumpang telah berada di lokasi tujuan sebelum menyelesaikan orderan.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white30, fontSize: 10),
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
                 ],
               ),
         ),
@@ -625,7 +750,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
   }
 }
 
-// Custom Glassmorphic Swipe Button Widget
+// Custom Glassmorphic Swipe Button Widget with Shimmer Effect
 class SwipeButton extends StatefulWidget {
   final VoidCallback onSwipeComplete;
   final String text;
@@ -644,14 +769,31 @@ class SwipeButton extends StatefulWidget {
   State<SwipeButton> createState() => _SwipeButtonState();
 }
 
-class _SwipeButtonState extends State<SwipeButton> {
+class _SwipeButtonState extends State<SwipeButton> with SingleTickerProviderStateMixin {
   double _position = 0.0;
   bool _isFinished = false;
+  late AnimationController _animController;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final startC = widget.colorStart ?? Colors.greenAccent;
     final endC = widget.colorEnd ?? Colors.teal;
+    final textC = widget.colorStart != null ? Colors.blueAccent.shade100 : Colors.greenAccent;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -667,12 +809,46 @@ class _SwipeButtonState extends State<SwipeButton> {
           child: Stack(
             children: [
               Center(
-                child: Text(
-                  widget.text,
-                  style: TextStyle(
-                    color: widget.colorStart != null ? Colors.indigoAccent.shade100 : Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 36.0, right: 12.0),
+                  child: AnimatedBuilder(
+                    animation: _animController,
+                    builder: (context, child) {
+                      return ShaderMask(
+                        shaderCallback: (bounds) {
+                          return LinearGradient(
+                            colors: [
+                              textC.withOpacity(0.3),
+                              Colors.white,
+                              textC.withOpacity(0.3),
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                            begin: Alignment(-2.0 + _animController.value * 4.0, 0.0),
+                            end: Alignment(0.0 + _animController.value * 4.0, 0.0),
+                          ).createShader(bounds);
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.text,
+                              style: const TextStyle(
+                                color: Colors.white, // Overridden by ShaderMask
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.double_arrow_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
