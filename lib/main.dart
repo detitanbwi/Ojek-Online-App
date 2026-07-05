@@ -301,6 +301,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   String driverName = 'Wiro Sableng';
   String driverId = 'DRV-0001';
   bool isLoading = false;
+  double driverBalance = 0.0;
   
   // Order history & active order state
   List<dynamic> historyOrders = [];
@@ -344,6 +345,26 @@ class _DriverHomePageState extends State<DriverHomePage> {
     if (isOnline) {
       fetchOrderHistory();
       checkActiveOrder();
+      fetchDriverProfile();
+    }
+  }
+
+  Future<void> fetchDriverProfile() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$backendUrl/driver/profile?phone=$driverPhone'),
+      );
+      final result = jsonDecode(response.body);
+      if (response.statusCode == 200 && result['success'] == true) {
+        setState(() {
+          driverBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
+          driverName = result['data']['name'];
+          driverPhone = result['data']['phone'];
+          driverId = 'DRV-' + result['data']['id'].toString().padLeft(4, '0');
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching profile: $e");
     }
   }
 
@@ -584,6 +605,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
     if (completed == true) {
       fetchOrderHistory();
       checkActiveOrder();
+      fetchDriverProfile();
     }
   }
 
@@ -616,6 +638,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
               if (isOnline) {
                 fetchOrderHistory();
                 checkActiveOrder();
+                fetchDriverProfile();
               }
             },
           ),
@@ -663,6 +686,19 @@ class _DriverHomePageState extends State<DriverHomePage> {
                               driverPhone,
                               style: const TextStyle(color: Colors.white54, fontSize: 13),
                             ),
+                            if (isOnline) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  const Icon(Icons.account_balance_wallet, color: Colors.amber, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Saldo: Rp ${formatPrice(driverBalance.toString().split('.')[0])}',
+                                    style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -844,28 +880,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                           ],
                         ),
                       ),
-                      
                       const SizedBox(height: 16),
-                      
-                      // Config Card info
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B).withOpacity(0.5),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('OneSignal Player ID:', style: TextStyle(fontSize: 10, color: Colors.white30, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            SelectableText(
-                              oneSignalId,
-                              style: const TextStyle(fontFamily: 'monospace', fontSize: 10, color: Colors.white60, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
