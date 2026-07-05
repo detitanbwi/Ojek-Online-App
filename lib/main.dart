@@ -302,6 +302,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
     
     // Load persisted driver online state and details
     loadSavedState();
+    fetchOneSignalId();
+    setupOneSignalObserver();
   }
 
   void loadSavedState() async {
@@ -328,9 +330,6 @@ class _DriverHomePageState extends State<DriverHomePage> {
     await prefs.setString('driver_name', name);
     await prefs.setString('driver_phone', phone);
     await prefs.setString('backend_url', backendUrl);
-  }
-    fetchOneSignalId();
-    setupOneSignalObserver();
   }
 
   void setupOneSignalObserver() {
