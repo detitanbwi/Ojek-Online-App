@@ -11,7 +11,7 @@ import 'OrderRequestPage.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Key-value memory to persist custom backend URL during runtime (can be customized in UI)
-String backendUrl = 'http://192.168.1.16/ojek-online/WebAPI/public/api';
+String backendUrl = 'https://ojek.wirodev.com/api';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

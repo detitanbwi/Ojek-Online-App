@@ -26,7 +26,7 @@ class OrderRequestPage extends StatefulWidget {
 class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   static const platform = MethodChannel('com.wirodev.ojol/intent');
-  final String apiUrl = 'http://192.168.1.16/ojek-online/WebAPI/public/api';
+  final String apiUrl = 'https://ojek.wirodev.com/api';
 
   Timer? _countdownTimer;
   int _secondsRemaining = 10;
