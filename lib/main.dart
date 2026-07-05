@@ -72,6 +72,8 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  static String? currentOpenOrderId;
+
   @override
   void initState() {
     super.initState();
@@ -132,6 +134,12 @@ class _MyAppState extends State<MyApp> {
     String? paymentType,
     String? status,
   }) {
+    if (currentOpenOrderId == orderId) {
+      debugPrint("Order page for ID $orderId is already open. Skipping duplicate push.");
+      return;
+    }
+    currentOpenOrderId = orderId;
+
     navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (context) => OrderRequestPage(
@@ -145,7 +153,11 @@ class _MyAppState extends State<MyApp> {
           status: status,
         ),
       ),
-    );
+    ).then((_) {
+      if (currentOpenOrderId == orderId) {
+        currentOpenOrderId = null;
+      }
+    });
   }
 
   void setupOneSignalListeners() {
@@ -726,7 +738,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
             ),
             
             // 2. Active Order Banner / Dropcard (Pulsing card)
-            if (isOnline && activeOrder != null) ...[
+            if (isOnline && activeOrder != null && activeOrder!['status'] == 'accepted') ...[
               GestureDetector(
                 onTap: openActiveOrderScreen,
                 child: Container(
