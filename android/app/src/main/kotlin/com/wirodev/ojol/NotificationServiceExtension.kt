@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.onesignal.notifications.INotificationReceivedEvent
@@ -18,9 +19,9 @@ class NotificationServiceExtension : INotificationServiceExtension {
         val additionalData = notification.additionalData
 
         if (additionalData != null && additionalData.has("type") && additionalData.getString("type") == "NEW_ORDER") {
-            Log.d("OneSignal", "New order received, creating native full-screen intent!")
+            Log.d("OneSignal", "New order received, processing notification routing...")
             
-            // Prevent OneSignal from showing the default notification banner, we will show our own full-screen one
+            // Prevent OneSignal from showing the default notification banner
             event.preventDefault()
             
             val context = event.context
@@ -41,30 +42,13 @@ class NotificationServiceExtension : INotificationServiceExtension {
                 Log.e("OneSignal", "WakeLock error: ${e.message}")
             }
 
-            // 2. Build full-screen intent
+            // 2. Build intents
             val fullScreenIntent = Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("order_id", orderId)
                 putExtra("origin", origin)
                 putExtra("destination", destination)
                 putExtra("price", price)
-            }
-            
-            // If screen is on (interactive), explicitly start the activity to bring the app to the front
-            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-            val isScreenOn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-                pm.isInteractive
-            } else {
-                @Suppress("DEPRECATION")
-                pm.isScreenOn
-            }
-            
-            if (isScreenOn) {
-                try {
-                    context.startActivity(fullScreenIntent)
-                } catch (e: Exception) {
-                    Log.e("OneSignal", "Failed to start activity directly when screen is on: ${e.message}")
-                }
             }
             
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -80,33 +64,6 @@ class NotificationServiceExtension : INotificationServiceExtension {
                 flags
             )
 
-            // 3. Create Notification Channel with Sound and Vibration (Android O+)
-            val channelId = "ojol_alarm_channel"
-            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val soundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val audioAttributes = android.media.AudioAttributes.Builder()
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
-                    .build()
-
-                val channel = NotificationChannel(
-                    channelId,
-                    "Ojol Order Alerts",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Urgent ojol order incoming alerts"
-                    enableLights(true)
-                    enableVibration(true)
-                    vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
-                    setSound(soundUri, audioAttributes)
-                    lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-                }
-                notificationManager.createNotificationChannel(channel)
-            }
-
-            // 4. Build notification actions (Accept/Decline buttons on heads-up banner)
             val acceptIntent = Intent(context, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 putExtra("order_id", orderId)
@@ -133,28 +90,107 @@ class NotificationServiceExtension : INotificationServiceExtension {
                 flags
             )
 
-            // 5. Build and display the notification with fullScreenIntent and actions
-            val builder = NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(context.resources.getIdentifier("ic_stat_onesignal_default", "drawable", context.packageName).let {
-                    if (it != 0) it else android.R.drawable.ic_dialog_alert
-                })
-                .setContentTitle("Order Baru!")
-                .setContentText("Jemput: $origin -> Tujuan: $destination. Tarif: Rp $price")
-                .setPriority(NotificationCompat.PRIORITY_MAX)
-                .setCategory(NotificationCompat.CATEGORY_CALL)
-                .setSound(soundUri)
-                .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
-                .setFullScreenIntent(fullScreenPendingIntent, true) // Wakes screen & shows on lockscreen automatically
-                .setAutoCancel(true)
-                .setOngoing(true)
-                .addAction(android.R.drawable.ic_menu_call, "Ambil", acceptPendingIntent)
-                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Tolak", declinePendingIntent)
+            // Check overlay permission to decide if we can launch activity directly or need the heads-up fallback
+            val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Settings.canDrawOverlays(context)
+            } else {
+                true
+            }
 
-            val notificationBuild = builder.build()
-            // Make notification play sound and vibrate continuously like an incoming call
-            notificationBuild.flags = notificationBuild.flags or android.app.Notification.FLAG_INSISTENT
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val soundUri = android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_RINGTONE)
 
-            notificationManager.notify(orderId.hashCode(), notificationBuild)
+            if (hasOverlayPermission) {
+                // Case A: Overlay permission is granted. Launch activity directly.
+                Log.d("OneSignal", "Overlay permission granted. Launching activity and showing standard notification (no heads-up pop-up).")
+                
+                try {
+                    context.startActivity(fullScreenIntent)
+                } catch (e: Exception) {
+                    Log.e("OneSignal", "Failed to start activity directly: ${e.message}")
+                }
+
+                // Show a default notification so we still play the ringtone but don't show the heads-up banner on top of the UI
+                val defaultChannelId = "ojol_default_channel"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val audioAttributes = android.media.AudioAttributes.Builder()
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build()
+
+                    val channel = NotificationChannel(
+                        defaultChannelId,
+                        "Ojol Standard Alerts",
+                        NotificationManager.IMPORTANCE_DEFAULT // plays sound but DOES NOT show heads-up banner
+                    ).apply {
+                        description = "Standard ojol order alerts"
+                        enableLights(true)
+                        enableVibration(true)
+                        setSound(soundUri, audioAttributes)
+                    }
+                    notificationManager.createNotificationChannel(channel)
+                }
+
+                val builder = NotificationCompat.Builder(context, defaultChannelId)
+                    .setSmallIcon(context.resources.getIdentifier("ic_stat_onesignal_default", "drawable", context.packageName).let {
+                        if (it != 0) it else android.R.drawable.ic_dialog_alert
+                    })
+                    .setContentTitle("Order Baru!")
+                    .setContentText("Jemput: $origin -> Tujuan: $destination. Tarif: Rp $price")
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT) // Standard priority, no heads-up
+                    .setSound(soundUri)
+                    .setAutoCancel(true)
+
+                val notificationBuild = builder.build()
+                notificationBuild.flags = notificationBuild.flags or android.app.Notification.FLAG_INSISTENT // Keep playing sound
+                notificationManager.notify(orderId.hashCode(), notificationBuild)
+
+            } else {
+                // Case B: No overlay permission. Display heads-up banner with action buttons.
+                Log.d("OneSignal", "Overlay permission not granted. Displaying heads-up banner.")
+
+                val alarmChannelId = "ojol_alarm_channel"
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val audioAttributes = android.media.AudioAttributes.Builder()
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                        .build()
+
+                    val channel = NotificationChannel(
+                        alarmChannelId,
+                        "Ojol Order Alerts",
+                        NotificationManager.IMPORTANCE_HIGH // shows heads-up banner
+                    ).apply {
+                        description = "Urgent ojol order incoming alerts"
+                        enableLights(true)
+                        enableVibration(true)
+                        vibrationPattern = longArrayOf(0, 1000, 500, 1000, 500, 1000)
+                        setSound(soundUri, audioAttributes)
+                        lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+                    }
+                    notificationManager.createNotificationChannel(channel)
+                }
+
+                val builder = NotificationCompat.Builder(context, alarmChannelId)
+                    .setSmallIcon(context.resources.getIdentifier("ic_stat_onesignal_default", "drawable", context.packageName).let {
+                        if (it != 0) it else android.R.drawable.ic_dialog_alert
+                    })
+                    .setContentTitle("Order Baru!")
+                    .setContentText("Jemput: $origin -> Tujuan: $destination. Tarif: Rp $price")
+                    .setPriority(NotificationCompat.PRIORITY_MAX)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setSound(soundUri)
+                    .setVibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000))
+                    .setFullScreenIntent(fullScreenPendingIntent, true)
+                    .setAutoCancel(true)
+                    .setOngoing(true)
+                    .addAction(android.R.drawable.ic_menu_call, "Ambil", acceptPendingIntent)
+                    .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Tolak", declinePendingIntent)
+
+                val notificationBuild = builder.build()
+                notificationBuild.flags = notificationBuild.flags or android.app.Notification.FLAG_INSISTENT // Keep playing sound
+                notificationManager.notify(orderId.hashCode(), notificationBuild)
+            }
         }
     }
 }
