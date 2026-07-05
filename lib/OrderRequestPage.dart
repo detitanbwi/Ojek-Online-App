@@ -377,25 +377,28 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'TARIF BERSIH',
-                                        style: TextStyle(
-                                          color: Colors.amber.shade300,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 1.2,
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'TARIF BERSIH',
+                                          style: TextStyle(
+                                            color: Colors.amber.shade300,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.2,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      const Text(
-                                        'Pendapatan bersih Anda',
-                                        style: TextStyle(color: Colors.white38, fontSize: 10),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 2),
+                                        const Text(
+                                          'Pendapatan bersih Anda',
+                                          style: TextStyle(color: Colors.white38, fontSize: 10),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
                                   Text(
                                     'Rp ${formatPrice(widget.price)}',
                                     style: const TextStyle(

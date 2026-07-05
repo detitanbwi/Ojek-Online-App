@@ -50,6 +50,23 @@ class NotificationServiceExtension : INotificationServiceExtension {
                 putExtra("price", price)
             }
             
+            // If screen is on (interactive), explicitly start the activity to bring the app to the front
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            val isScreenOn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
+                pm.isInteractive
+            } else {
+                @Suppress("DEPRECATION")
+                pm.isScreenOn
+            }
+            
+            if (isScreenOn) {
+                try {
+                    context.startActivity(fullScreenIntent)
+                } catch (e: Exception) {
+                    Log.e("OneSignal", "Failed to start activity directly when screen is on: ${e.message}")
+                }
+            }
+            
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             } else {
