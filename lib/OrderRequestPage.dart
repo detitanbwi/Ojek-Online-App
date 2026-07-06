@@ -374,16 +374,36 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                               ),
                             ),
                           ] else ...[
-                            // Header for accepted active order
-                            const Row(
+                            // Header for completed, cancelled, or active order
+                            Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.directions_car, color: Colors.greenAccent, size: 24),
-                                SizedBox(width: 8),
+                                Icon(
+                                  _orderStatus == 'completed'
+                                      ? Icons.check_circle_rounded
+                                      : (_orderStatus == 'cancelled' || _orderStatus == 'rejected'
+                                          ? Icons.cancel_rounded
+                                          : Icons.directions_car),
+                                  color: _orderStatus == 'completed'
+                                      ? Colors.greenAccent
+                                      : (_orderStatus == 'cancelled' || _orderStatus == 'rejected'
+                                          ? Colors.redAccent
+                                          : Colors.greenAccent),
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 8),
                                 Text(
-                                  'PERJALANAN SEDANG BERLANGSUNG',
+                                  _orderStatus == 'completed'
+                                      ? 'ORDERAN SELESAI'
+                                      : (_orderStatus == 'cancelled' || _orderStatus == 'rejected'
+                                          ? 'ORDERAN DIBATALKAN'
+                                          : 'PERJALANAN SEDANG BERLANGSUNG'),
                                   style: TextStyle(
-                                    color: Colors.greenAccent,
+                                    color: _orderStatus == 'completed'
+                                        ? Colors.greenAccent
+                                        : (_orderStatus == 'cancelled' || _orderStatus == 'rejected'
+                                            ? Colors.redAccent
+                                            : Colors.greenAccent),
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 1,

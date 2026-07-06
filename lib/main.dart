@@ -1008,6 +1008,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                   children: [
                     Expanded(
                       child: Container(
+                        height: 90,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           gradient: isDarkMode
@@ -1059,6 +1060,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: Container(
+                        height: 90,
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           gradient: isDarkMode
@@ -1540,7 +1542,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
       backgroundColor: scaffoldBg,
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F172A),
-        elevation: 0,
+        elevation: 3,
+        shadowColor: Colors.black.withOpacity(0.4),
         systemOverlayStyle: const SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           statusBarIconBrightness: Brightness.light,
@@ -1550,10 +1553,10 @@ class _DriverHomePageState extends State<DriverHomePage> {
           children: [
             Image.asset(
               'assets/logo-white.png',
-              height: 24,
+              height: 36,
               fit: BoxFit.contain,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Text(
               _selectedIndex == 0
                   ? 'DASHBOARD'
@@ -1591,6 +1594,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
       ),
       bottomNavigationBar: Container(
         margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16, top: 4),
+        height: 70,
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(24),
@@ -1603,38 +1607,85 @@ class _DriverHomePageState extends State<DriverHomePage> {
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BottomNavigationBar(
-            currentIndex: _selectedIndex,
-            onTap: (index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-            },
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            selectedItemColor: Colors.amber.shade700,
-            unselectedItemColor: isDarkMode ? Colors.white30 : Colors.black38,
-            showUnselectedLabels: true,
-            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-            unselectedLabelStyle: const TextStyle(fontSize: 11),
-            type: BottomNavigationBarType.fixed,
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.dashboard_rounded),
-                label: 'Dashboard',
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _selectedIndex = 0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.dashboard_rounded,
+                      color: _selectedIndex == 0 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Dashboard',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: _selectedIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                        color: _selectedIndex == 0 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.history_rounded),
-                label: 'Riwayat',
+            ),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _selectedIndex = 1),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.history_rounded,
+                      color: _selectedIndex == 1 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Riwayat',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: _selectedIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                        color: _selectedIndex == 1 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.person_rounded),
-                label: 'Profil',
+            ),
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() => _selectedIndex = 2),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person_rounded,
+                      color: _selectedIndex == 2 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Profil',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: _selectedIndex == 2 ? FontWeight.bold : FontWeight.normal,
+                        color: _selectedIndex == 2 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
