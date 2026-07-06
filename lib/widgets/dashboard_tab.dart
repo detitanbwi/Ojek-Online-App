@@ -70,7 +70,7 @@ class DashboardTab extends StatelessWidget {
       onRefresh: onRefresh,
       subTitleColor: subTitleColor,
       child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         child: Column(
           children: [
             // Dynamic Greeting & Date Header Row (Dashboard Accessory)

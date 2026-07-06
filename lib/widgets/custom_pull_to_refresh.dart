@@ -18,13 +18,29 @@ class CustomPullToRefresh extends StatefulWidget {
   State<CustomPullToRefresh> createState() => _CustomPullToRefreshState();
 }
 
-class _CustomPullToRefreshState extends State<CustomPullToRefresh> {
-  final ValueNotifier<double> _pullDistanceNotifier = ValueNotifier<double>(0.0);
-  bool _canTrigger = false;
+class _CustomPullToRefreshState extends State<CustomPullToRefresh> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  double _startY = 0.0;
+  double _scrollOffset = 0.0;
+  bool _isDragging = false;
+  bool _hasTriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    if (widget.isRefreshing) {
+      _animationController.value = 1.0;
+      _hasTriggered = true;
+    }
+  }
 
   @override
   void dispose() {
-    _pullDistanceNotifier.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -32,123 +48,144 @@ class _CustomPullToRefreshState extends State<CustomPullToRefresh> {
   void didUpdateWidget(covariant CustomPullToRefresh oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isRefreshing && !widget.isRefreshing) {
-      // Reset indicator position when refreshing is done
-      _pullDistanceNotifier.value = 0.0;
+      // Refresh ended, slide the header back up
+      _animationController.animateTo(0.0, curve: Curves.easeOut);
+      _hasTriggered = false;
+    } else if (!oldWidget.isRefreshing && widget.isRefreshing) {
+      // Refresh started externally, show the header
+      _animationController.animateTo(1.0, curve: Curves.easeOut);
+      _hasTriggered = true;
     }
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (widget.isRefreshing || _hasTriggered) return;
+    _startY = event.position.dy;
+    _isDragging = false;
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (widget.isRefreshing || _hasTriggered) return;
+    
+    final double deltaY = event.position.dy - _startY;
+    
+    // Once we start dragging, we continue updating progress regardless of minor scroll changes (prevents freezing mid-drag)
+    // We allow a safer top offset limit (<= 10.0 pixels) to start the pull action
+    if (_isDragging || (_scrollOffset <= 10.0 && deltaY > 0)) {
+      _isDragging = true;
+      // Spring damping formula (dragOffset / 2.2) to give a satisfying heavy spring resistance feel
+      final double pullDistance = deltaY / 2.2;
+      
+      if (pullDistance >= 80.0) {
+        // Auto-trigger and lock immediately when threshold is reached!
+        _hasTriggered = true;
+        _isDragging = false;
+        _animationController.animateTo(1.0, duration: const Duration(milliseconds: 150), curve: Curves.easeOut);
+        widget.onRefresh();
+      } else {
+        // Map pullDistance (0..80) to animation value (0..1)
+        final double progress = (pullDistance / 80.0).clamp(0.0, 1.2);
+        _animationController.value = progress;
+      }
+    }
+  }
+
+  void _handlePointerUp(PointerUpEvent event) {
+    if (widget.isRefreshing || _hasTriggered || !_isDragging) return;
+    _isDragging = false;
+
+    // Only gets hit if the user released the touch BEFORE reaching the threshold (80.0)
+    _animationController.animateTo(0.0, curve: Curves.easeOut);
   }
 
   @override
   Widget build(BuildContext context) {
     return NotificationListener<ScrollNotification>(
       onNotification: (ScrollNotification notification) {
-        if (widget.isRefreshing) return false;
-
-        if (notification is ScrollUpdateNotification) {
-          final double metrics = notification.metrics.pixels;
-          if (metrics < 0) {
-            _pullDistanceNotifier.value = -metrics;
-            if (-metrics > 80.0) {
-              _canTrigger = true;
-            }
-          } else {
-            if (_pullDistanceNotifier.value != 0.0) {
-              _pullDistanceNotifier.value = 0.0;
-            }
-          }
-        } else if (notification is ScrollEndNotification) {
-          if (_canTrigger) {
-            _canTrigger = false;
-            widget.onRefresh();
-          }
-          _pullDistanceNotifier.value = 0.0;
-        }
+        // Track the current scroll position of the child scroll view
+        _scrollOffset = notification.metrics.pixels;
         return false;
       },
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // Scrollable content viewport (full height, no resize to prevent jitters)
-          Positioned.fill(
-            child: widget.child,
-          ),
-          
-          // Re-build ONLY the floating pill when pull distance changes
-          ValueListenableBuilder<double>(
-            valueListenable: _pullDistanceNotifier,
-            builder: (context, pullDistance, child) {
-              final double currentPull = widget.isRefreshing ? 80.0 : pullDistance.clamp(0.0, 100.0);
-              // topPosition maps 0..80 pull distance to -60..20 pixel offset
-              final double topPosition = -60.0 + (currentPull * 1.0).clamp(0.0, 80.0);
+      child: Listener(
+        onPointerDown: _handlePointerDown,
+        onPointerMove: _handlePointerMove,
+        onPointerUp: _handlePointerUp,
+        behavior: HitTestBehavior.translucent,
+        child: AnimatedBuilder(
+          animation: _animationController,
+          builder: (context, child) {
+            final double progress = _animationController.value;
+            // Height maps 0..1 progress to 0..80 pixels height
+            final double containerHeight = (progress * 80.0).clamp(0.0, 80.0);
+            final bool showContent = progress > 0.15;
 
-              return Positioned(
-                top: topPosition,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 150),
-                    opacity: currentPull > 15 ? 1.0 : 0.0,
-                    child: Card(
-                      elevation: 6,
-                      shadowColor: Colors.black.withOpacity(0.15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      color: Theme.of(context).cardColor,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(30),
-                          border: Border.all(
-                            color: widget.subTitleColor.withOpacity(0.1),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.isRefreshing) ...[
-                              const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Memperbarui...',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: widget.subTitleColor.withOpacity(0.8),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ] else ...[
-                              Icon(
-                                pullDistance >= 80.0 ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                                color: Colors.amber,
-                                size: 16,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                pullDistance >= 80.0 ? 'Lepas untuk memperbarui' : 'Tarik untuk memperbarui',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: widget.subTitleColor.withOpacity(0.8),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ]
-                          ],
-                        ),
-                      ),
-                    ),
+            return Stack(
+              children: [
+                // Translate the ENTIRE viewport content down based on pull progress
+                // This prevents overlapping with headers on all screens
+                Transform.translate(
+                  offset: Offset(0, containerHeight),
+                  child: widget.child,
+                ),
+                
+                // Sliding loader header (clean transparent style)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: containerHeight,
+                    width: double.infinity,
+                    color: Colors.transparent,
+                    child: showContent
+                        ? Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (widget.isRefreshing || progress >= 1.0) ...[
+                                  const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Memperbarui data...',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: widget.subTitleColor.withOpacity(0.7),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ] else ...[
+                                  Icon(
+                                    Icons.arrow_downward_rounded,
+                                    color: Colors.amber,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Tarik untuk memperbarui',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: widget.subTitleColor.withOpacity(0.7),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ]
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
-              );
-            },
-          ),
-        ],
+              ],
+            );
+          },
+        ),
       ),
     );
   }

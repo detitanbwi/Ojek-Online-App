@@ -71,7 +71,7 @@ class HistoryTab extends StatelessWidget {
       onRefresh: onRefresh,
       subTitleColor: subTitleColor,
       child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
         padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
