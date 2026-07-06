@@ -332,6 +332,9 @@ class _DriverHomePageState extends State<DriverHomePage> {
   List<dynamic> historyOrders = [];
   Map<String, dynamic>? activeOrder;
   bool _loadingHistory = false;
+  bool _refreshingDashboard = false;
+  bool _refreshingHistory = false;
+  bool _refreshingProfile = false;
   
   Timer? _syncTimer;
 
@@ -781,6 +784,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
               driverBalance: driverBalance,
               isOnline: isOnline,
               isLoading: isLoading,
+              isRefreshing: _refreshingDashboard,
               isDarkMode: isDarkMode,
               historyOrders: historyOrders,
               activeOrder: activeOrder,
@@ -789,10 +793,28 @@ class _DriverHomePageState extends State<DriverHomePage> {
               cardBg: cardBg,
               dividerColor: dividerColor,
               onRefresh: () async {
-                if (isOnline) {
-                  await fetchDriverProfile();
-                  await checkActiveOrder();
-                  await fetchOrderHistory();
+                if (!isOnline) return;
+                setState(() => _refreshingDashboard = true);
+                
+                final timeoutTimer = Timer(const Duration(seconds: 8), () {
+                  if (mounted && _refreshingDashboard) {
+                    setState(() => _refreshingDashboard = false);
+                  }
+                });
+
+                try {
+                  await Future.wait([
+                    fetchDriverProfile(),
+                    checkActiveOrder(),
+                    fetchOrderHistory(),
+                  ]);
+                } catch (e) {
+                  debugPrint("Dashboard refresh error: $e");
+                } finally {
+                  timeoutTimer.cancel();
+                  if (mounted) {
+                    setState(() => _refreshingDashboard = false);
+                  }
                 }
               },
               onOnlineChanged: (val) {
@@ -808,14 +830,31 @@ class _DriverHomePageState extends State<DriverHomePage> {
               isOnline: isOnline,
               isDarkMode: isDarkMode,
               loadingHistory: _loadingHistory,
+              isRefreshing: _refreshingHistory,
               historyOrders: historyOrders,
               titleColor: titleColor,
               subTitleColor: subTitleColor,
               cardBg: cardBg,
               dividerColor: dividerColor,
               onRefresh: () async {
-                if (isOnline) {
+                if (!isOnline) return;
+                setState(() => _refreshingHistory = true);
+
+                final timeoutTimer = Timer(const Duration(seconds: 8), () {
+                  if (mounted && _refreshingHistory) {
+                    setState(() => _refreshingHistory = false);
+                  }
+                });
+
+                try {
                   await fetchOrderHistory();
+                } catch (e) {
+                  debugPrint("History refresh error: $e");
+                } finally {
+                  timeoutTimer.cancel();
+                  if (mounted) {
+                    setState(() => _refreshingHistory = false);
+                  }
                 }
               },
               onOrderTap: openHistoryDetailScreen,
@@ -827,10 +866,31 @@ class _DriverHomePageState extends State<DriverHomePage> {
               driverBalance: driverBalance,
               driverId: driverId,
               isDarkMode: isDarkMode,
+              isRefreshing: _refreshingProfile,
               titleColor: titleColor,
               subTitleColor: subTitleColor,
               cardBg: cardBg,
               dividerColor: dividerColor,
+              onRefresh: () async {
+                setState(() => _refreshingProfile = true);
+
+                final timeoutTimer = Timer(const Duration(seconds: 8), () {
+                  if (mounted && _refreshingProfile) {
+                    setState(() => _refreshingProfile = false);
+                  }
+                });
+
+                try {
+                  await fetchDriverProfile();
+                } catch (e) {
+                  debugPrint("Profile refresh error: $e");
+                } finally {
+                  timeoutTimer.cancel();
+                  if (mounted) {
+                    setState(() => _refreshingProfile = false);
+                  }
+                }
+              },
               onLogoutTap: () {
                 showDialog(
                   context: context,

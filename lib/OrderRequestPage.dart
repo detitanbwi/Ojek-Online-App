@@ -677,22 +677,25 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                'PENDAPATANMU',
-                                                style: TextStyle(color: Colors.amber.shade300, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                                              ),
-                                              const Text(
-                                                'Setelah potongan admin',
-                                                style: TextStyle(color: Colors.white38, fontSize: 9),
-                                              ),
-                                            ],
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'PENDAPATANMU',
+                                                  style: TextStyle(color: Colors.amber.shade300, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                                                ),
+                                                const Text(
+                                                  'Setelah potongan admin',
+                                                  style: TextStyle(color: Colors.white38, fontSize: 9),
+                                                ),
+                                              ],
+                                            ),
                                           ),
+                                          const SizedBox(width: 8),
                                           Text(
                                             'Rp ${formatPrice(widget.driverFare ?? widget.price)}',
-                                            style: const TextStyle(color: Colors.amber, fontSize: 26, fontWeight: FontWeight.w900),
+                                            style: const TextStyle(color: Colors.amber, fontSize: 22, fontWeight: FontWeight.w900),
                                           ),
                                         ],
                                       ),

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../utils/formatter.dart';
+import 'custom_pull_to_refresh.dart';
 
 class DashboardTab extends StatelessWidget {
   final String driverName;
   final double driverBalance;
   final bool isOnline;
   final bool isLoading;
+  final bool isRefreshing;
   final bool isDarkMode;
   final List<dynamic> historyOrders;
   final Map<String, dynamic>? activeOrder;
@@ -24,6 +26,7 @@ class DashboardTab extends StatelessWidget {
     required this.driverBalance,
     required this.isOnline,
     required this.isLoading,
+    required this.isRefreshing,
     required this.isDarkMode,
     required this.historyOrders,
     required this.activeOrder,
@@ -44,14 +47,46 @@ class DashboardTab extends StatelessWidget {
         .map((o) => double.tryParse(o['driver_fare']?.toString() ?? '0') ?? 0.0)
         .fold(0.0, (sum, item) => sum + item);
 
-    return RefreshIndicator(
+    return CustomPullToRefresh(
+      isRefreshing: isRefreshing,
       onRefresh: onRefresh,
-      color: const Color(0xFF1E3A8A),
-      backgroundColor: cardBg,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         child: Column(
           children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.fastOutSlowIn,
+              height: isRefreshing ? 60.0 : 0.0,
+              width: double.infinity,
+              child: isRefreshing
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 10),
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Memperbarui...',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: subTitleColor.withOpacity(0.6),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
             // 1. Profile and Online/Offline Toggle Header Card (Styled as a premium Elevated Blue Card)
             Card(
               margin: const EdgeInsets.only(left: 20, right: 20, top: 16),

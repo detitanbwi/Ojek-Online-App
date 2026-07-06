@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/formatter.dart';
+import 'custom_pull_to_refresh.dart';
 
 class ProfileTab extends StatelessWidget {
   final String driverName;
@@ -8,12 +9,14 @@ class ProfileTab extends StatelessWidget {
   final double driverBalance;
   final String driverId;
   final bool isDarkMode;
+  final bool isRefreshing;
   final Color titleColor;
   final Color subTitleColor;
   final Color cardBg;
   final Color dividerColor;
 
   final VoidCallback onLogoutTap;
+  final Future<void> Function() onRefresh;
 
   const ProfileTab({
     super.key,
@@ -23,21 +26,58 @@ class ProfileTab extends StatelessWidget {
     required this.driverBalance,
     required this.driverId,
     required this.isDarkMode,
+    required this.isRefreshing,
     required this.titleColor,
     required this.subTitleColor,
     required this.cardBg,
     required this.dividerColor,
     required this.onLogoutTap,
+    required this.onRefresh,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    return CustomPullToRefresh(
+      isRefreshing: isRefreshing,
+      onRefresh: onRefresh,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.fastOutSlowIn,
+              height: isRefreshing ? 60.0 : 0.0,
+              width: double.infinity,
+              child: isRefreshing
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Memperbarui...',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: subTitleColor.withOpacity(0.6),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           // Header layout with driver avatar and ID Badge
           Center(
             child: Column(
@@ -134,7 +174,8 @@ class ProfileTab extends StatelessWidget {
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

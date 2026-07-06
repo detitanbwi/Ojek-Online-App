@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../utils/formatter.dart';
+import 'custom_pull_to_refresh.dart';
 
 class HistoryTab extends StatelessWidget {
   final bool isOnline;
   final bool isDarkMode;
   final bool loadingHistory;
+  final bool isRefreshing;
   final List<dynamic> historyOrders;
   final Color titleColor;
   final Color subTitleColor;
@@ -19,6 +21,7 @@ class HistoryTab extends StatelessWidget {
     required this.isOnline,
     required this.isDarkMode,
     required this.loadingHistory,
+    required this.isRefreshing,
     required this.historyOrders,
     required this.titleColor,
     required this.subTitleColor,
@@ -63,15 +66,46 @@ class HistoryTab extends StatelessWidget {
       );
     }
 
-    return RefreshIndicator(
+    return CustomPullToRefresh(
+      isRefreshing: isRefreshing,
       onRefresh: onRefresh,
-      color: const Color(0xFF1E3A8A),
-      backgroundColor: cardBg,
       child: Padding(
         padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.fastOutSlowIn,
+              height: isRefreshing ? 60.0 : 0.0,
+              width: double.infinity,
+              child: isRefreshing
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Memperbarui...',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: subTitleColor.withOpacity(0.6),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
