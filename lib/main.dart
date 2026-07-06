@@ -1049,7 +1049,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                               style: TextStyle(
                                 color: titleColor,
                                 fontSize: 22,
-                                fontWeight: FontWeight.extrabold,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ],
@@ -1100,7 +1100,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
                               style: TextStyle(
                                 color: isDarkMode ? Colors.greenAccent : Colors.green.shade800,
                                 fontSize: 15,
-                                fontWeight: FontWeight.extrabold,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ],
