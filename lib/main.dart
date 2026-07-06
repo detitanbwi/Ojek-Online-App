@@ -1,16 +1,18 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'OrderRequestPage.dart';
-
 import 'WelcomeScreen.dart';
 import 'LoginScreen.dart';
+
+import 'services/api_service.dart';
+import 'widgets/dashboard_tab.dart';
+import 'widgets/history_tab.dart';
+import 'widgets/profile_tab.dart';
 
 // Global navigator key to handle navigation from background/global notification events
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -318,6 +320,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   String driverId = 'DRV-0001';
   bool isLoading = false;
   double driverBalance = 0.0;
+  late ApiService apiService;
   
   // Theme Mode
   bool isDarkMode = true;
@@ -338,6 +341,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
   @override
   void initState() {
     super.initState();
+    apiService = ApiService(baseUrl: backendUrl);
     _phoneController.text = driverPhone;
     _nameController.text = driverName;
     
@@ -428,11 +432,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
   Future<void> checkDriverStatusOnline() async {
     try {
-      final response = await http.get(
-        Uri.parse('$backendUrl/driver/profile?email=$driverEmail'),
-      );
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
+      final result = await apiService.fetchProfile(driverEmail);
+      if (result['success'] == true) {
         final bool serverOnline = result['data']['status_online'] == true;
         
         if (isOnline && !serverOnline) {
@@ -462,11 +463,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
   Future<void> checkActiveOrder() async {
     try {
-      final response = await http.get(
-        Uri.parse('$backendUrl/driver/order/active?email=$driverEmail'),
-      );
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
+      final result = await apiService.checkActiveOrder(driverEmail);
+      if (result['success'] == true) {
         setState(() {
           activeOrder = result['data'];
         });
@@ -482,11 +480,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
     });
 
     try {
-      final response = await http.get(
-        Uri.parse('$backendUrl/driver/orders?email=$driverEmail'),
-      );
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
+      final result = await apiService.fetchOrders(driverEmail);
+      if (result['success'] == true) {
         setState(() {
           historyOrders = result['data'] ?? [];
         });
@@ -502,11 +497,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
 
   Future<void> fetchDriverProfile() async {
     try {
-      final response = await http.get(
-        Uri.parse('$backendUrl/driver/profile?email=$driverEmail'),
-      );
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
+      final result = await apiService.fetchProfile(driverEmail);
+      if (result['success'] == true) {
         setState(() {
           driverBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
           driverName = result['data']['name'];
@@ -575,17 +567,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
     }
 
     try {
-      final response = await http.post(
-        Uri.parse('$backendUrl/driver/set-online'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': driverEmail,
-          'onesignal_player_id': playerId,
-        }),
-      );
-
-      final result = jsonDecode(response.body);
-      if (response.statusCode == 200 && result['success'] == true) {
+      final result = await apiService.setOnline(driverEmail, playerId);
+      if (result['success'] == true) {
         final dbId = 'DRV-' + result['data']['id'].toString().padLeft(4, '0');
         setState(() {
           isOnline = true;
@@ -630,18 +613,10 @@ class _DriverHomePageState extends State<DriverHomePage> {
     });
 
     try {
-      final response = await http.post(
-        Uri.parse('$backendUrl/driver/logout'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'email': driverEmail,
-        }),
-      );
+      final result = await apiService.logout(driverEmail);
+      final bool isDriverNotFound = result['message'] == 'Driver not found.';
 
-      final result = jsonDecode(response.body);
-      final bool isDriverNotFound = response.statusCode == 404 || (result != null && result['message'] == 'Driver not found.');
-
-      if ((response.statusCode == 200 && result['success'] == true) || isDriverNotFound) {
+      if (result['success'] == true || isDriverNotFound) {
         stopSyncTimer();
         setState(() {
           isOnline = false;
@@ -718,782 +693,14 @@ class _DriverHomePageState extends State<DriverHomePage> {
     );
   }
 
-  String formatPrice(String price) {
-    final intVal = int.tryParse(price.replaceAll('.', ''));
-    if (intVal == null) return price;
-    final reg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
-    return intVal.toString().replaceAllMapped(reg, (Match m) => '${m[1]}.');
-  }
 
-  // Dashboard Tab Content Widget
-  Widget buildDashboardTab(Color titleColor, Color subTitleColor, Color cardBg, Color dividerColor) {
-    final completedOrdersCount = historyOrders.where((o) => o['status'] == 'completed').length;
-    final totalEarnings = historyOrders
-        .where((o) => o['status'] == 'completed')
-        .map((o) => double.tryParse(o['driver_fare']?.toString() ?? '0') ?? 0.0)
-        .fold(0.0, (sum, item) => sum + item);
-
-    return RefreshIndicator(
-      onRefresh: () async {
-        if (isOnline) {
-          await fetchDriverProfile();
-          await checkActiveOrder();
-          await fetchOrderHistory();
-        }
-      },
-      color: const Color(0xFF1E3A8A),
-      backgroundColor: cardBg,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        child: Column(
-          children: [
-            // 1. Profile and Online/Offline Toggle Header Card (Styled as a premium Elevated Blue Card)
-            Card(
-              margin: const EdgeInsets.only(left: 20, right: 20, top: 16),
-              elevation: 6,
-              shadowColor: const Color(0xFF1E3A8A).withOpacity(0.15),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Stack(
-                  children: [
-                    // Premium Dark Blue Gradient Background (Spans full height dynamically)
-                    Positioned.fill(
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [Color(0xFF0F172A), Color(0xFF1E3A8A)], // Dark Navy Slate to Indigo Blue
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Subtle transparent design overlapping circles (matching uploaded image aesthetics)
-                    Positioned(
-                      right: -40,
-                      top: -40,
-                      child: Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.04),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 20,
-                      bottom: -60,
-                      child: Container(
-                        width: 150,
-                        height: 150,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.02),
-                        ),
-                      ),
-                    ),
-                    // Blue Card content elements
-                    Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              // Avatar
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: Colors.white.withOpacity(0.12),
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              // Details
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      driverName,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 19,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.3,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.account_balance_wallet_rounded, color: Colors.amber, size: 16),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          isOnline 
-                                              ? 'Saldo: Rp ${formatPrice(driverBalance.toString().split('.')[0])}'
-                                              : 'Offline - Saldo Terkunci',
-                                          style: const TextStyle(
-                                            color: Colors.amber, // Clear Gold Text on Blue Card is highly readable
-                                            fontSize: 14, 
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          
-                          const SizedBox(height: 18),
-                          Divider(color: Colors.white.withOpacity(0.08)),
-                          const SizedBox(height: 6),
-                          
-                          // Online/Offline Toggle Switch Row
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: isOnline ? Colors.greenAccent : Colors.white24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    isOnline ? 'ONLINE & SIAP MENERIMA ORDER' : 'OFFLINE (TIDAK AKTIF)',
-                                    style: TextStyle(
-                                      color: isOnline ? Colors.greenAccent : Colors.white54,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              isLoading
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.amber),
-                                    )
-                                  : Switch(
-                                      value: isOnline,
-                                      activeColor: Colors.greenAccent,
-                                      activeTrackColor: Colors.green.withOpacity(0.2),
-                                      inactiveThumbColor: Colors.white30,
-                                      inactiveTrackColor: Colors.white10,
-                                      onChanged: (val) {
-                                        if (val) {
-                                          setDriverOnline();
-                                        } else {
-                                          setDriverOffline();
-                                        }
-                                      },
-                                    ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            // 2. Active Order Banner / Dropcard (Pulsing card)
-            if (isOnline && activeOrder != null && activeOrder!['status'] == 'accepted') ...[
-              GestureDetector(
-                onTap: openActiveOrderScreen,
-                child: Container(
-                  margin: const EdgeInsets.only(left: 20, right: 20, top: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)], // Dark Blue Gradient
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.blueAccent.withOpacity(0.15),
-                        blurRadius: 10,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.stars, color: Colors.amber, size: 28),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'PESANAN SEDANG BERJALAN',
-                              style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Tarif: Rp ${formatPrice(activeOrder!['price'].toString().split('.')[0])} (${activeOrder!['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'})',
-                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Ke: ${activeOrder!['destination']}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: Colors.white54, fontSize: 11),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 20),
-
-            // 3. Stats and Overview Content
-            if (!isOnline) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.power_settings_new_rounded,
-                        size: 64,
-                        color: subTitleColor.withOpacity(0.2),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Anda Sedang Offline',
-                        style: TextStyle(
-                          color: titleColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Aktifkan switch Online di atas untuk mulai menerima pesanan ojek.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: subTitleColor.withOpacity(0.7),
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ] else ...[
-              // Stats Row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        height: 90,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: isDarkMode
-                              ? const LinearGradient(
-                                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : const LinearGradient(
-                                  colors: [Colors.white, Color(0xFFF8FAFC)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: dividerColor),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(isDarkMode ? 0.15 : 0.04),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'ORDER SELESAI',
-                              style: TextStyle(
-                                color: subTitleColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '$completedOrdersCount',
-                              style: TextStyle(
-                                color: titleColor,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        height: 90,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          gradient: isDarkMode
-                              ? const LinearGradient(
-                                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                )
-                              : const LinearGradient(
-                                  colors: [Colors.white, Color(0xFFF8FAFC)],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: dividerColor),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(isDarkMode ? 0.15 : 0.04),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'PENDAPATAN',
-                              style: TextStyle(
-                                color: subTitleColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Rp ${formatPrice(totalEarnings.toStringAsFixed(0))}',
-                              style: TextStyle(
-                                color: isDarkMode ? Colors.greenAccent : Colors.green.shade800,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Status Active Card
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 20),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: isDarkMode
-                      ? const LinearGradient(
-                          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                        )
-                      : const LinearGradient(
-                          colors: [Color(0xFFEFF6FF), Colors.white],
-                        ),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: isDarkMode ? dividerColor : const Color(0xFFBFDBFE)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.wifi_tethering_rounded,
-                        color: Colors.green,
-                        size: 28,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Sistem WiroJek Aktif',
-                            style: TextStyle(
-                              color: titleColor,
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Aplikasi siap menerima pesanan masuk secara real-time. Tetap online untuk mendapatkan orderan terdekat.',
-                            style: TextStyle(
-                              color: subTitleColor,
-                              fontSize: 11,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 30),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  // History Tab Content Widget
-  Widget buildHistoryTab(Color titleColor, Color subTitleColor, Color cardBg, Color dividerColor) {
-    if (!isOnline) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.power_settings_new_rounded,
-              size: 64,
-              color: subTitleColor.withOpacity(0.2),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Anda Sedang Offline',
-              style: TextStyle(
-                color: titleColor,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Aktifkan switch Online di Dashboard untuk memuat riwayat order.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: subTitleColor.withOpacity(0.7),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: () async {
-        await fetchOrderHistory();
-      },
-      color: const Color(0xFF1E3A8A),
-      backgroundColor: cardBg,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'DAFTAR RIWAYAT ORDERAN',
-                  style: TextStyle(color: subTitleColor, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
-                ),
-                if (_loadingHistory)
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: titleColor),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: _loadingHistory && historyOrders.isEmpty
-                ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-                : historyOrders.isEmpty
-                  ? Center(
-                      child: Text('Belum ada riwayat orderan.', style: TextStyle(color: subTitleColor.withOpacity(0.5))),
-                    )
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                      itemCount: historyOrders.length,
-                      itemBuilder: (context, index) {
-                        final order = historyOrders[index];
-                        final bool isCompleted = order['status'] == 'completed';
-                        final bool isCancelled = order['status'] == 'cancelled' || order['status'] == 'rejected';
-                        
-                        // Dynamic Gradient background for History Cards
-                        final cardGradient = isDarkMode
-                            ? const LinearGradient(
-                                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                            : const LinearGradient(
-                                colors: [Colors.white, Color(0xFFF8FAFC)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              );
-
-                        // Price text color: vibrant amber in dark mode, readable deep brown-amber in light mode
-                        final Color priceColor = isDarkMode ? const Color(0xFFFFB000) : const Color(0xFFB45309);
-
-                        return GestureDetector(
-                          onTap: () => openHistoryDetailScreen(order),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: cardGradient,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: dividerColor),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDarkMode ? 0.12 : 0.03),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                // Status Icon
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: isCompleted 
-                                      ? Colors.green.withOpacity(0.1) 
-                                      : (isCancelled ? Colors.red.withOpacity(0.1) : Colors.amber.withOpacity(0.1)),
-                                  child: Icon(
-                                    isCompleted 
-                                        ? Icons.check 
-                                        : (isCancelled ? Icons.close : Icons.access_time),
-                                    color: isCompleted 
-                                        ? Colors.green 
-                                        : (isCancelled ? Colors.redAccent : Colors.amber),
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                
-                                // Text Details
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Order #${order['id']} - ${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'}',
-                                        style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Ke: ${order['destination']}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(color: subTitleColor, fontSize: 11),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                // Price
-                                Text(
-                                  'Rp ${formatPrice(order['price'].toString().split('.')[0])}',
-                                  style: TextStyle(color: priceColor, fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Profile Tab Content Widget
-  Widget buildProfileTab(Color titleColor, Color subTitleColor, Color cardBg, Color dividerColor) {
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header layout with driver avatar and ID Badge
-          Center(
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 38,
-                  backgroundColor: isDarkMode ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.04),
-                  child: Icon(
-                    Icons.person,
-                    color: isDarkMode ? Colors.white70 : Colors.black87,
-                    size: 40,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  driverName,
-                  style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                // Driver ID Badge (Moved here to clear Dashboard card)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    'Driver ID: $driverId',
-                    style: TextStyle(
-                      color: isDarkMode ? Colors.amber : Colors.amber.shade900, 
-                      fontSize: 13, 
-                      fontWeight: FontWeight.w800, 
-                      fontFamily: 'monospace'
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 32),
-          
-          // Profile Details Card Form (Read only with clean display)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: dividerColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'INFORMASI AKUN',
-                  style: TextStyle(color: subTitleColor, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1),
-                ),
-                const SizedBox(height: 24),
-                
-                // Details row-by-row
-                buildDetailRow(Icons.person, 'Nama Lengkap', driverName, titleColor, subTitleColor),
-                const SizedBox(height: 16),
-                buildDetailRow(Icons.email, 'Alamat Email', driverEmail, titleColor, subTitleColor),
-                const SizedBox(height: 16),
-                buildDetailRow(Icons.phone, 'Nomor HP', driverPhone, titleColor, subTitleColor),
-                const SizedBox(height: 16),
-                buildDetailRow(Icons.account_balance_wallet, 'Saldo Dompet', 'Rp ' + formatPrice(driverBalance.toString().split('.')[0]), titleColor, subTitleColor),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Logout Button
-          ElevatedButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                  title: const Text('Keluar dari Akun?'),
-                  content: const Text('Anda tidak akan dapat menerima pesanan ojek online baru saat berada di luar akun.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Batal'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        performLogout();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: const Text('Keluar Akun'),
-                    ),
-                  ],
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent.withOpacity(0.1),
-              foregroundColor: Colors.redAccent,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Colors.redAccent, width: 1.5),
-              ),
-            ),
-            child: const Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.logout_rounded, size: 20),
-                SizedBox(width: 8),
-                Text('Keluar dari Aplikasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   void performLogout() async {
     setState(() {
       isLoading = true;
     });
     try {
-      await http.post(
-        Uri.parse('$backendUrl/driver/logout'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': driverEmail}),
-      );
+      await apiService.logout(driverEmail);
     } catch (e) {
       debugPrint("API Logout error: $e");
     }
@@ -1510,23 +717,6 @@ class _DriverHomePageState extends State<DriverHomePage> {
         (route) => false,
       );
     }
-  }
-
-  Widget buildDetailRow(IconData icon, String label, String value, Color titleColor, Color subTitleColor) {
-    return Row(
-      children: [
-        Icon(icon, color: subTitleColor, size: 20),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(color: subTitleColor, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-            const SizedBox(height: 2),
-            Text(value, style: TextStyle(color: titleColor, fontSize: 14, fontWeight: FontWeight.w700)),
-          ],
-        ),
-      ],
-    );
   }
 
   @override
@@ -1586,9 +776,90 @@ class _DriverHomePageState extends State<DriverHomePage> {
         child: IndexedStack(
           index: _selectedIndex,
           children: [
-            buildDashboardTab(titleColor, subTitleColor, cardBg, dividerColor),
-            buildHistoryTab(titleColor, subTitleColor, cardBg, dividerColor),
-            buildProfileTab(titleColor, subTitleColor, cardBg, dividerColor),
+            DashboardTab(
+              driverName: driverName,
+              driverBalance: driverBalance,
+              isOnline: isOnline,
+              isLoading: isLoading,
+              isDarkMode: isDarkMode,
+              historyOrders: historyOrders,
+              activeOrder: activeOrder,
+              titleColor: titleColor,
+              subTitleColor: subTitleColor,
+              cardBg: cardBg,
+              dividerColor: dividerColor,
+              onRefresh: () async {
+                if (isOnline) {
+                  await fetchDriverProfile();
+                  await checkActiveOrder();
+                  await fetchOrderHistory();
+                }
+              },
+              onOnlineChanged: (val) {
+                if (val) {
+                  setDriverOnline();
+                } else {
+                  setDriverOffline();
+                }
+              },
+              onActiveOrderTap: openActiveOrderScreen,
+            ),
+            HistoryTab(
+              isOnline: isOnline,
+              isDarkMode: isDarkMode,
+              loadingHistory: _loadingHistory,
+              historyOrders: historyOrders,
+              titleColor: titleColor,
+              subTitleColor: subTitleColor,
+              cardBg: cardBg,
+              dividerColor: dividerColor,
+              onRefresh: () async {
+                if (isOnline) {
+                  await fetchOrderHistory();
+                }
+              },
+              onOrderTap: openHistoryDetailScreen,
+            ),
+            ProfileTab(
+              driverName: driverName,
+              driverEmail: driverEmail,
+              driverPhone: driverPhone,
+              driverBalance: driverBalance,
+              driverId: driverId,
+              isDarkMode: isDarkMode,
+              titleColor: titleColor,
+              subTitleColor: subTitleColor,
+              cardBg: cardBg,
+              dividerColor: dividerColor,
+              onLogoutTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    title: const Text('Konfirmasi Keluar'),
+                    content: const Text('Apakah Anda yakin ingin keluar dari akun driver WiroJek ini?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Batal'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          performLogout();
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text('Keluar Akun'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
