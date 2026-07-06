@@ -938,85 +938,90 @@ class _DriverHomePageState extends State<DriverHomePage> {
             ),
           ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _selectedIndex = 0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.dashboard_rounded,
-                      color: _selectedIndex == 0 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
-                      size: 24,
+        child: Builder(
+          builder: (context) {
+            final Color selectedNavColor = isDarkMode ? Colors.blue.shade300 : const Color(0xFF1E3A8A);
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _selectedIndex = 0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.dashboard_rounded,
+                          color: _selectedIndex == 0 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
+                          size: 24,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Dashboard',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: _selectedIndex == 0 ? FontWeight.bold : FontWeight.normal,
+                            color: _selectedIndex == 0 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Dashboard',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: _selectedIndex == 0 ? FontWeight.bold : FontWeight.normal,
-                        color: _selectedIndex == 0 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _selectedIndex = 1),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.history_rounded,
-                      color: _selectedIndex == 1 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
-                      size: 24,
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _selectedIndex = 1),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.history_rounded,
+                          color: _selectedIndex == 1 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
+                          size: 24,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Riwayat',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: _selectedIndex == 1 ? FontWeight.bold : FontWeight.normal,
+                            color: _selectedIndex == 1 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Riwayat',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: _selectedIndex == 1 ? FontWeight.bold : FontWeight.normal,
-                        color: _selectedIndex == 1 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => setState(() => _selectedIndex = 2),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.person_rounded,
-                      color: _selectedIndex == 2 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
-                      size: 24,
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => setState(() => _selectedIndex = 2),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.person_rounded,
+                          color: _selectedIndex == 2 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
+                          size: 24,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Profil',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: _selectedIndex == 2 ? FontWeight.bold : FontWeight.normal,
+                            color: _selectedIndex == 2 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Profil',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: _selectedIndex == 2 ? FontWeight.bold : FontWeight.normal,
-                        color: _selectedIndex == 2 ? Colors.amber.shade700 : (isDarkMode ? Colors.white30 : Colors.black38),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          }
         ),
       ),
     );

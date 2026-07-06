@@ -39,6 +39,24 @@ class DashboardTab extends StatelessWidget {
     required this.onActiveOrderTap,
   });
 
+  String _getGreeting() {
+    final int hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 12) return 'Selamat Pagi ☀️';
+    if (hour >= 12 && hour < 17) return 'Selamat Siang 🌤️';
+    if (hour >= 17 && hour < 19) return 'Selamat Sore 🌅';
+    return 'Selamat Malam 🌙';
+  }
+
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    final days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    final months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    return '${days[now.weekday % 7]}, ${now.day} ${months[now.month - 1]} ${now.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final completedOrdersCount = historyOrders.where((o) => o['status'] == 'completed').length;
@@ -55,9 +73,57 @@ class DashboardTab extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         child: Column(
           children: [
+            // Dynamic Greeting & Date Header Row (Dashboard Accessory)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, right: 24, top: 20, bottom: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_getGreeting()}, ${driverName.split(" ")[0]}!',
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _getFormattedDate(),
+                        style: TextStyle(
+                          color: subTitleColor.withOpacity(0.7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (isOnline)
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.greenAccent,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.greenAccent,
+                            blurRadius: 8,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
             // 1. Profile and Online/Offline Toggle Header Card (Styled as a premium Elevated Blue Card)
             Card(
-              margin: const EdgeInsets.only(left: 20, right: 20, top: 16),
+              margin: const EdgeInsets.only(left: 20, right: 20, top: 12),
               elevation: 6,
               shadowColor: const Color(0xFF1E3A8A).withOpacity(0.15),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -415,6 +481,92 @@ class DashboardTab extends StatelessWidget {
                 ),
               ),
 
+              // 4. Performance Metrics (Accessory Row)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: dividerColor),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+                            const SizedBox(height: 6),
+                            Text(
+                              '4.9 Rating',
+                              style: TextStyle(color: titleColor, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: dividerColor),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.trending_up_rounded, color: Colors.greenAccent, size: 20),
+                            const SizedBox(height: 6),
+                            Text(
+                              '98% Terima',
+                              style: TextStyle(color: titleColor, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: dividerColor),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.timer_rounded, color: Colors.blueAccent, size: 20),
+                            const SizedBox(height: 6),
+                            Text(
+                              '5.5 Jam',
+                              style: TextStyle(color: titleColor, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Scanning Radar Wave Animation (Accessory Animation)
+              if (activeOrder == null || activeOrder!['status'] != 'accepted') ...[
+                const SizedBox(height: 10),
+                Text(
+                  'MENCARI ORDERAN TERDEKAT...',
+                  style: TextStyle(
+                    color: subTitleColor.withOpacity(0.5),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const RadarScanner(),
+              ],
+
               const SizedBox(height: 20),
 
               // Status Active Card
@@ -482,3 +634,84 @@ class DashboardTab extends StatelessWidget {
     );
   }
 }
+
+class RadarScanner extends StatefulWidget {
+  const RadarScanner({super.key});
+
+  @override
+  State<RadarScanner> createState() => _RadarScannerState();
+}
+
+class _RadarScannerState extends State<RadarScanner> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2500), // very smooth 2.5s duration
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 160,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Concerntric waves using AnimatedBuilder
+          for (int i = 0; i < 3; i++)
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                // Calculate progress with a timed offset per circle
+                double progress = (_controller.value + (i / 3.0)) % 1.0;
+                return Container(
+                  width: 140 * progress,
+                  height: 140 * progress,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF1E3A8A).withOpacity((1.0 - progress) * 0.15),
+                    border: Border.all(
+                      color: const Color(0xFF1E3A8A).withOpacity((1.0 - progress) * 0.35),
+                      width: 1.5,
+                    ),
+                  ),
+                );
+              },
+            ),
+          // Central Pulse Ring
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF1E3A8A),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1E3A8A).withOpacity(0.4),
+                  blurRadius: 10,
+                  spreadRadius: 3,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.directions_bike_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
