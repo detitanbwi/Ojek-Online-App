@@ -69,43 +69,13 @@ class HistoryTab extends StatelessWidget {
     return CustomPullToRefresh(
       isRefreshing: isRefreshing,
       onRefresh: onRefresh,
-      child: Padding(
+      subTitleColor: subTitleColor,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.fastOutSlowIn,
-              height: isRefreshing ? 60.0 : 0.0,
-              width: double.infinity,
-              child: isRefreshing
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Memperbarui...',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: subTitleColor.withOpacity(0.6),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -122,106 +92,113 @@ class HistoryTab extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            Expanded(
-              child: loadingHistory && historyOrders.isEmpty
-                ? const Center(child: CircularProgressIndicator(color: Colors.amber))
-                : historyOrders.isEmpty
-                  ? Center(
+            loadingHistory && historyOrders.isEmpty
+              ? const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40.0),
+                    child: CircularProgressIndicator(color: Colors.amber),
+                  ),
+                )
+              : historyOrders.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40.0),
                       child: Text('Belum ada riwayat orderan.', style: TextStyle(color: subTitleColor.withOpacity(0.5))),
-                    )
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                      itemCount: historyOrders.length,
-                      itemBuilder: (context, index) {
-                        final order = historyOrders[index];
-                        final bool isCompleted = order['status'] == 'completed';
-                        final bool isCancelled = order['status'] == 'cancelled' || order['status'] == 'rejected';
-                        
-                        // Dynamic Gradient background for History Cards
-                        final cardGradient = isDarkMode
-                            ? const LinearGradient(
-                                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                            : const LinearGradient(
-                                colors: [Colors.white, Color(0xFFF8FAFC)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              );
-
-                        // Price text color: vibrant amber in dark mode, readable deep brown-amber in light mode
-                        final Color priceColor = isDarkMode ? const Color(0xFFFFB000) : const Color(0xFFB45309);
-
-                        return GestureDetector(
-                          onTap: () => onOrderTap(Map<String, dynamic>.from(order)),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: cardGradient,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: dividerColor),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(isDarkMode ? 0.12 : 0.03),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                // Status Icon
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: isCompleted 
-                                      ? Colors.green.withOpacity(0.1) 
-                                      : (isCancelled ? Colors.red.withOpacity(0.1) : Colors.amber.withOpacity(0.1)),
-                                  child: Icon(
-                                    isCompleted 
-                                        ? Icons.check 
-                                        : (isCancelled ? Icons.close : Icons.access_time),
-                                    color: isCompleted 
-                                        ? Colors.green 
-                                        : (isCancelled ? Colors.redAccent : Colors.amber),
-                                    size: 18,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                
-                                // Text Details
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Order #${order['id']} - ${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'}',
-                                        style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        'Ke: ${order['destination']}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(color: subTitleColor, fontSize: 11),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                // Price
-                                Text(
-                                  'Rp ${formatPrice(order['price'].toString().split('.')[0])}',
-                                  style: TextStyle(color: priceColor, fontSize: 14, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
                     ),
-            ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: historyOrders.length,
+                    itemBuilder: (context, index) {
+                      final order = historyOrders[index];
+                      final bool isCompleted = order['status'] == 'completed';
+                      final bool isCancelled = order['status'] == 'cancelled' || order['status'] == 'rejected';
+                      
+                      // Dynamic Gradient background for History Cards
+                      final cardGradient = isDarkMode
+                          ? const LinearGradient(
+                              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : const LinearGradient(
+                              colors: [Colors.white, Color(0xFFF8FAFC)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            );
+
+                      // Price text color: vibrant amber in dark mode, readable deep brown-amber in light mode
+                      final Color priceColor = isDarkMode ? const Color(0xFFFFB000) : const Color(0xFFB45309);
+
+                      return GestureDetector(
+                        onTap: () => onOrderTap(Map<String, dynamic>.from(order)),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: cardGradient,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: dividerColor),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(isDarkMode ? 0.12 : 0.03),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              // Status Icon
+                              CircleAvatar(
+                                radius: 18,
+                                backgroundColor: isCompleted 
+                                    ? Colors.green.withOpacity(0.1) 
+                                    : (isCancelled ? Colors.red.withOpacity(0.1) : Colors.amber.withOpacity(0.1)),
+                                child: Icon(
+                                  isCompleted 
+                                      ? Icons.check 
+                                      : (isCancelled ? Icons.close : Icons.access_time),
+                                  color: isCompleted 
+                                      ? Colors.green 
+                                      : (isCancelled ? Colors.redAccent : Colors.amber),
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              
+                              // Text Details
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Order #${order['id']} - ${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'}',
+                                      style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Ke: ${order['destination']}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(color: subTitleColor, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Price
+                              Text(
+                                  'Rp ${formatPrice(order['price'].toString().split('.')[0])}',
+                                style: TextStyle(color: priceColor, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ],
         ),
       ),

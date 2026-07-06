@@ -50,43 +50,11 @@ class DashboardTab extends StatelessWidget {
     return CustomPullToRefresh(
       isRefreshing: isRefreshing,
       onRefresh: onRefresh,
+      subTitleColor: subTitleColor,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         child: Column(
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.fastOutSlowIn,
-              height: isRefreshing ? 60.0 : 0.0,
-              width: double.infinity,
-              child: isRefreshing
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(height: 10),
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Memperbarui...',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: subTitleColor.withOpacity(0.6),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
             // 1. Profile and Online/Offline Toggle Header Card (Styled as a premium Elevated Blue Card)
             Card(
               margin: const EdgeInsets.only(left: 20, right: 20, top: 16),

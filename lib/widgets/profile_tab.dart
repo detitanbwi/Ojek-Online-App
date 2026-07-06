@@ -40,44 +40,13 @@ class ProfileTab extends StatelessWidget {
     return CustomPullToRefresh(
       isRefreshing: isRefreshing,
       onRefresh: onRefresh,
+      subTitleColor: subTitleColor,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.fastOutSlowIn,
-              height: isRefreshing ? 60.0 : 0.0,
-              width: double.infinity,
-              child: isRefreshing
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Memperbarui...',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: subTitleColor.withOpacity(0.6),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
           // Header layout with driver avatar and ID Badge
           Center(
             child: Column(
