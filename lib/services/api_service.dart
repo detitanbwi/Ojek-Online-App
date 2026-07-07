@@ -43,4 +43,23 @@ class ApiService {
     );
     return jsonDecode(response.body);
   }
+
+  Future<Map<String, dynamic>> withdraw({
+    required int driverId,
+    required String bankName,
+    required String accountNumber,
+    required double amount,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/driver/withdraw'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'driver_id': driverId,
+        'bank_name': bankName,
+        'account_number': accountNumber,
+        'amount': amount,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
 }

@@ -871,6 +871,21 @@ class _DriverHomePageState extends State<DriverHomePage> {
               subTitleColor: subTitleColor,
               cardBg: cardBg,
               dividerColor: dividerColor,
+              onWithdraw: (bank, acc, amount) async {
+                final int rawId = int.tryParse(driverId.replaceAll('DRV-', '')) ?? 0;
+                final result = await apiService.withdraw(
+                  driverId: rawId,
+                  bankName: bank,
+                  accountNumber: acc,
+                  amount: amount,
+                );
+                if (result['success'] == true) {
+                  setState(() {
+                    driverBalance = double.tryParse(result['data']['wallet_balance'].toString()) ?? (driverBalance - amount);
+                  });
+                }
+                return result;
+              },
               onRefresh: () async {
                 setState(() => _refreshingProfile = true);
 
