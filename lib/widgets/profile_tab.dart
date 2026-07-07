@@ -402,7 +402,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.account_balance_wallet_rounded, color: Colors.white75, size: 18),
+                      Icon(Icons.account_balance_wallet_rounded, color: Colors.white70, size: 18),
                       SizedBox(width: 8),
                       Text(
                         'WIROJEK WALLET',
