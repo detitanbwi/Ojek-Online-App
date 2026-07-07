@@ -17,6 +17,7 @@ class OrderRequestPage extends StatefulWidget {
   final String? status;
   final String? adminFee;
   final String? driverFare;
+  final String? serviceType;
 
   const OrderRequestPage({
     super.key,
@@ -30,6 +31,7 @@ class OrderRequestPage extends StatefulWidget {
     this.status,
     this.adminFee,
     this.driverFare,
+    this.serviceType,
   });
 
   @override
@@ -49,6 +51,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
   String? _passengerName;
   String? _paymentType;
   String? _orderStatus;
+  String? _serviceType;
   bool _isLoading = false;
 
   @override
@@ -58,6 +61,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
     _passengerName = widget.passengerName ?? 'Penumpang';
     _paymentType = widget.paymentType ?? 'cash';
     _orderStatus = widget.status ?? 'pending';
+    _serviceType = widget.serviceType ?? 'wiro_ride';
 
     // Setup animation controller for pulsing alert ring
     _pulseController = AnimationController(
@@ -103,6 +107,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
               _orderStatus = 'accepted';
               _paymentType = serverOrder['payment_type'];
               _passengerName = serverOrder['passenger_name'];
+              _serviceType = serverOrder['service_type'];
             });
             _countdownTimer?.cancel();
             _pulseController.stop();
@@ -528,13 +533,13 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'NAMA PENUMPANG',
+                                            'PENUMPANG',
                                             style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             _passengerName!,
-                                            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
@@ -544,15 +549,31 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'TIPE PEMBAYARAN',
+                                            'LAYANAN',
                                             style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
-                                            _paymentType == 'qris' ? '📱 QRIS (Midtrans)' : '💵 Tunai (Cash)',
+                                            _serviceType == 'wiro_car' ? 'WiroCar' : 'WiroRide',
+                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'BAYAR',
+                                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _paymentType == 'qris' ? 'QRIS' : 'Tunai',
                                             style: TextStyle(
                                               color: _paymentType == 'qris' ? Colors.indigoAccent.shade100 : Colors.greenAccent.shade100, 
-                                              fontSize: 14, 
+                                              fontSize: 13, 
                                               fontWeight: FontWeight.bold
                                             ),
                                           ),

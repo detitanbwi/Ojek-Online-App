@@ -36,6 +36,8 @@ dependencies:
   awesome_notifications: ^0.12.1
   http: ^1.2.0
   shared_preferences: ^2.5.5
+  google_maps_flutter: ^2.5.3
+  geolocator: ^10.1.0
 
 dev_dependencies:
   flutter_test:
@@ -61,6 +63,7 @@ flutter:
 
   assets:
     - assets/
+    - assets/images/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

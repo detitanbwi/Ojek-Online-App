@@ -174,7 +174,7 @@ class HistoryTab extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Order #${order['id']} - ${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'}',
+                                      'Order #${order['id']} - ${order['service_type'] == 'wiro_car' ? 'WiroCar' : 'WiroRide'} (${order['payment_type'] == 'qris' ? 'QRIS' : 'Tunai'})',
                                       style: TextStyle(color: titleColor, fontSize: 13, fontWeight: FontWeight.bold),
                                     ),
                                     const SizedBox(height: 2),

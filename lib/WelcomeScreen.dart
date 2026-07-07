@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart'; // To navigate to DriverHomePage
 import 'LoginScreen.dart'; // To navigate to LoginScreen
+import 'CustomerScreen.dart'; // To navigate to CustomerScreen
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -34,8 +35,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
       if (mounted) {
         final prefs = await SharedPreferences.getInstance();
         final bool isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+        final String role = prefs.getString('role') ?? 'driver';
 
-        Widget targetScreen = isLoggedIn ? const DriverHomePage() : const LoginScreen();
+        Widget targetScreen;
+        if (isLoggedIn) {
+          targetScreen = role == 'customer' ? const CustomerScreen() : const DriverHomePage();
+        } else {
+          targetScreen = const LoginScreen();
+        }
 
         Navigator.pushReplacement(
           context,

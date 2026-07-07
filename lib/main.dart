@@ -691,6 +691,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
           paymentType: order['payment_type'],
           adminFee: order['admin_fee']?.toString().split('.')[0],
           driverFare: order['driver_fare']?.toString().split('.')[0],
+          serviceType: order['service_type'],
         ),
       ),
     );
@@ -938,105 +939,64 @@ class _DriverHomePageState extends State<DriverHomePage> {
           ],
         ),
       ),
-      bottomNavigationBar: Container(
-        margin: const EdgeInsets.only(left: 16, right: 16, bottom: 16, top: 4),
-        height: 70,
-        decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isDarkMode ? 0.3 : 0.08),
-              blurRadius: 16,
-              spreadRadius: 2,
-              offset: const Offset(0, 4),
+      bottomNavigationBar: Theme(
+        data: Theme.of(context).copyWith(
+          navigationBarTheme: NavigationBarThemeData(
+            labelTextStyle: MaterialStateProperty.resolveWith((states) {
+              if (states.contains(MaterialState.selected)) {
+                return TextStyle(
+                  color: isDarkMode ? const Color(0xFFCC5900) : const Color(0xFF002B93),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                );
+              }
+              return TextStyle(
+                color: isDarkMode ? Colors.white70 : Colors.black54,
+                fontSize: 12,
+              );
+            }),
+            iconTheme: MaterialStateProperty.resolveWith((states) {
+              if (states.contains(MaterialState.selected)) {
+                return IconThemeData(
+                  color: isDarkMode ? const Color(0xFFCC5900) : const Color(0xFF002B93),
+                  size: 24,
+                );
+              }
+              return IconThemeData(
+                color: isDarkMode ? Colors.white60 : Colors.black45,
+                size: 24,
+              );
+            }),
+          ),
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+          },
+          backgroundColor: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+          indicatorColor: isDarkMode
+              ? const Color(0xFFCC5900).withOpacity(0.2)
+              : const Color(0xFF002B93).withOpacity(0.12),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.history_outlined),
+              selectedIcon: Icon(Icons.history_rounded),
+              label: 'Riwayat',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Profil',
             ),
           ],
-        ),
-        child: Builder(
-          builder: (context) {
-            final Color selectedNavColor = isDarkMode ? Colors.blue.shade300 : const Color(0xFF1E3A8A);
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _selectedIndex = 0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.dashboard_rounded,
-                          color: _selectedIndex == 0 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
-                          size: 24,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Dashboard',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: _selectedIndex == 0 ? FontWeight.bold : FontWeight.normal,
-                            color: _selectedIndex == 0 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _selectedIndex = 1),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.history_rounded,
-                          color: _selectedIndex == 1 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
-                          size: 24,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Riwayat',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: _selectedIndex == 1 ? FontWeight.bold : FontWeight.normal,
-                            color: _selectedIndex == 1 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => setState(() => _selectedIndex = 2),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.person_rounded,
-                          color: _selectedIndex == 2 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
-                          size: 24,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Profil',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: _selectedIndex == 2 ? FontWeight.bold : FontWeight.normal,
-                            color: _selectedIndex == 2 ? selectedNavColor : (isDarkMode ? Colors.white30 : Colors.black38),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
         ),
       ),
     );
