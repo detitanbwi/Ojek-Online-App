@@ -116,9 +116,9 @@ class _ProfileTabState extends State<ProfileTab> {
                       Text(
                         'Saldo saat ini: Rp ${formatPrice(widget.driverBalance.toString().split('.')[0])}',
                         style: const TextStyle(
-                          color: Colors.emerald,
+                          color: Colors.green,
                           fontSize: 14,
-                          fontWeight: FontWeight.w750,
+                          fontWeight: FontWeight.w800,
                         ),
                         textAlign: TextAlign.center,
                       ),
@@ -256,12 +256,11 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                 ),
               );
-            };
-          },
-        );
-      },
-    );
-  }
+            },
+          );
+        },
+      );
+    }
 
   void _showSuccessDialog(BuildContext context, String bank, String acc, double amount) {
     showDialog(
@@ -277,7 +276,7 @@ class _ProfileTabState extends State<ProfileTab> {
               const SizedBox(height: 16),
               const Icon(
                 Icons.check_circle_outline,
-                color: Colors.emerald,
+                color: Colors.green,
                 size: 72,
               ),
               const SizedBox(height: 20),
@@ -372,7 +371,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       style: TextStyle(
                         color: widget.isDarkMode ? Colors.amber : Colors.amber.shade900, 
                         fontSize: 13, 
-                        fontWeight: FontWeight.w800, 
+                        fontWeight: FontWeight.w850, 
                         fontFamily: 'monospace'
                       ),
                     ),
@@ -407,7 +406,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       Text(
                         'WIROJEK WALLET',
                         style: TextStyle(
-                          color: Colors.white75,
+                          color: Colors.white70,
                           fontSize: 11,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 1.5,
@@ -448,7 +447,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         SizedBox(width: 8),
                         Text(
                           'Tarik Dana / Withdrawal',
-                          style: TextStyle(fontWeight: FontWeight.extrabold, fontSize: 14),
+                          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                         ),
                       ],
                     ),
