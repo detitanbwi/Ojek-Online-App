@@ -255,12 +255,13 @@ class _ProfileTabState extends State<ProfileTab> {
                     ],
                   ),
                 ),
-              );
-            },
-          );
-        },
-      );
-    }
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   void _showSuccessDialog(BuildContext context, String bank, String acc, double amount) {
     showDialog(
@@ -371,7 +372,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       style: TextStyle(
                         color: widget.isDarkMode ? Colors.amber : Colors.amber.shade900, 
                         fontSize: 13, 
-                        fontWeight: FontWeight.w850, 
+                        fontWeight: FontWeight.w800, 
                         fontFamily: 'monospace'
                       ),
                     ),
@@ -401,7 +402,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.account_balance_wallet_rounded, color: Colors.white70, size: 18),
+                      Icon(Icons.account_balance_wallet_rounded, color: Colors.white75, size: 18),
                       SizedBox(width: 8),
                       Text(
                         'WIROJEK WALLET',
