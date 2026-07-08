@@ -1342,27 +1342,28 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton(
-                        onPressed: () {
-                          setState(() {
-                            _sheetState = 'booking';
-                            _pickupController.text = "Lokasi Saya";
-                            _destinationController.clear();
-                            _distanceKm = null;
-                          });
-                          Navigator.pop(context);
+                        onPressed: () async {
+                          await _cancelOrder();
+                          if (mounted) {
+                            Navigator.pop(context);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFCC5900),
+                          backgroundColor: Colors.red[800],
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          elevation: 4,
+                          elevation: 2,
                         ),
-                        child: const Text(
-                          "OK",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        child: const SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            "Batalkan Pesanan",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ],
