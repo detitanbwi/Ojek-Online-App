@@ -530,7 +530,6 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  // Fetch route from Google Directions API and animate polyline
   Future<void> _fetchRoutePolyline() async {
     if (_pickupLatLng == null || _destinationLatLng == null) return;
 
@@ -540,6 +539,35 @@ class _MapScreenState extends State<MapScreen> {
       _fullRoutePoints = [];
       _animatedRoutePoints = [];
     });
+
+    // Try OSRM Free Routing API first (highly reliable, no API key needed, strictly road routing)
+    try {
+      final url = Uri.parse(
+        'https://router.project-osrm.org/route/v1/driving/'
+        '${_pickupLatLng!.longitude},${_pickupLatLng!.latitude};'
+        '${_destinationLatLng!.longitude},${_destinationLatLng!.latitude}'
+        '?overview=full&geometries=geojson'
+      );
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['code'] == 'Ok' && data['routes'] != null && data['routes'].isNotEmpty) {
+          final coordinates = data['routes'][0]['geometry']['coordinates'] as List<dynamic>;
+          final List<LatLng> points = coordinates.map((coord) {
+            return LatLng(coord[1] as double, coord[0] as double);
+          }).toList();
+          
+          setState(() {
+            _fullRoutePoints = points;
+            _animatedRoutePoints = [];
+          });
+          _animatePolyline();
+          return;
+        }
+      }
+    } catch (e) {
+      print('OSRM Routing API error: $e');
+    }
 
     try {
       final url = Uri.parse(
@@ -697,25 +725,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    double minSize = 0.38;
-    double maxSize = 0.85;
-    double initialSize = 0.38;
-    bool doSnap = true;
-    List<double> snaps = [0.38, 0.85];
 
-    if (_sheetState == 'searching') {
-      minSize = 0.38;
-      maxSize = 0.38;
-      initialSize = 0.38;
-      doSnap = false;
-      snaps = [0.38];
-    } else if (_sheetState == 'matched') {
-      minSize = 0.52;
-      maxSize = 0.85;
-      initialSize = 0.52;
-      doSnap = true;
-      snaps = [0.52, 0.85];
-    }
 
     return Scaffold(
       body: Stack(
@@ -748,30 +758,194 @@ class _MapScreenState extends State<MapScreen> {
             },
           ),
 
-          // Floating Back Button
+          // Top Panel: Back Button & Route Input Card
           Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             left: 16,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    )
+            right: 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_sheetState == 'booking') ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Circular Back Button
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.arrow_back,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // Route Inputs Card
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.12),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                              )
+                            ],
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.circle, color: Color(0xFFCC5900), size: 14),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _pickupController,
+                                      onChanged: (val) => _fetchSuggestions(val, 'pickup'),
+                                      onSubmitted: (val) => FocusScope.of(context).unfocus(),
+                                      decoration: const InputDecoration(
+                                        hintText: "Cari lokasi jemput...",
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 20, thickness: 1),
+                              Row(
+                                children: [
+                                  const Icon(Icons.location_on, color: Color(0xFF002B93), size: 16),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _destinationController,
+                                      onChanged: (val) => _fetchSuggestions(val, 'destination'),
+                                      onSubmitted: (val) => FocusScope.of(context).unfocus(),
+                                      decoration: const InputDecoration(
+                                        hintText: "Masukkan lokasi tujuan...",
+                                        border: InputBorder.none,
+                                        isDense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Suggestions List overlay directly below the input card (with margin)
+                  if (_suggestions.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      margin: const EdgeInsets.only(left: 48), // Align with the route card
+                      constraints: const BoxConstraints(maxHeight: 220),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.12),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          )
+                        ],
+                        border: Border.all(
+                          color: isDark ? const Color(0xFF334155) : Colors.grey[200]!,
+                        ),
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _suggestions.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final suggestion = _suggestions[index];
+                          final text = suggestion['description'];
+                          return ListTile(
+                            leading: Icon(
+                              suggestion['is_my_location'] == true 
+                                  ? Icons.my_location 
+                                  : Icons.location_on_outlined, 
+                              color: suggestion['is_my_location'] == true ? Colors.blue : Colors.grey,
+                              size: 18,
+                            ),
+                            title: Text(
+                              text,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: suggestion['is_my_location'] == true ? FontWeight.bold : FontWeight.normal,
+                                color: suggestion['is_my_location'] == true 
+                                    ? Colors.blue 
+                                    : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                              ),
+                            ),
+                            dense: true,
+                            onTap: () => _selectSuggestion(suggestion),
+                          );
+                        },
+                      ),
+                    ),
                   ],
-                ),
-                child: Icon(
-                  Icons.arrow_back,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                ),
-              ),
+                ] else ...[
+                  // Simple circular Back button when not booking
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: Icon(
+                            Icons.arrow_back,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
 
@@ -790,609 +964,429 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ),
 
-          // Draggable Scrollable Sheet for Booking Detail Inputs & Options
-          DraggableScrollableSheet(
-            initialChildSize: initialSize,
-            minChildSize: minSize,
-            maxChildSize: maxSize,
-            snap: doSnap,
-            snapSizes: snaps,
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 16,
-                      offset: const Offset(0, -6),
-                    )
-                  ],
-                ),
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  children: [
-                    // Drag Handle
-                    Center(
-                      child: Container(
-                        width: 48,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF334155) : Colors.grey[300],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+          // Custom Bottom Card (Wraps Content Height Dynamically)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 16,
+                    offset: const Offset(0, -6),
+                  )
+                ],
+              ),
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 12,
+                bottom: MediaQuery.of(context).padding.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Decorative Handle Line
+                  Center(
+                    child: Container(
+                      width: 48,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF334155) : Colors.grey[300],
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                  ),
+                  const SizedBox(height: 16),
 
-                    if (_sheetState == 'booking') ...[
-                      // Pickup & Destination Input Fields
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.circle, color: Color(0xFFCC5900), size: 16),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _pickupController,
-                                    onChanged: (val) => _fetchSuggestions(val, 'pickup'),
-                                    onSubmitted: (val) => FocusScope.of(context).unfocus(),
-                                    decoration: const InputDecoration(
-                                      hintText: "Cari lokasi jemput...",
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 24, thickness: 1),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on, color: Color(0xFF002B93), size: 18),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _destinationController,
-                                    onChanged: (val) => _fetchSuggestions(val, 'destination'),
-                                    onSubmitted: (val) => FocusScope.of(context).unfocus(),
-                                    decoration: const InputDecoration(
-                                      hintText: "Masukkan lokasi tujuan...",
-                                      border: InputBorder.none,
-                                      isDense: true,
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Auto-suggestion suggestions overlay list
-                      if (_suggestions.isNotEmpty)
-                        Container(
-                          constraints: const BoxConstraints(maxHeight: 200),
+                  if (_sheetState == 'booking') ...[
+                    // Vehicle Choices List (Limited to WiroRide and WiroCar)
+                    ..._vehicleOptions.map((option) {
+                      final isSelected = _selectedVehicle == option.id;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedVehicle = option.id;
+                            _selectedVehiclePrice = option.price;
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF1E293B) : Colors.grey[50]!,
-                            borderRadius: BorderRadius.circular(16),
+                            color: isSelected 
+                                ? (isDark ? const Color(0xFF1E293B) : const Color(0xFFEFF6FF))
+                                : (isDark ? const Color(0xFF0F172A) : Colors.white),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: isDark ? const Color(0xFF334155) : Colors.grey[200]!,
+                              color: isSelected 
+                                  ? const Color(0xFFCC5900) 
+                                  : (isDark ? const Color(0xFF334155) : Colors.grey[200]!),
+                              width: 1.5,
                             ),
                           ),
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.all(8),
-                            itemCount: _suggestions.length,
-                            separatorBuilder: (context, index) => const Divider(height: 8),
-                            itemBuilder: (context, index) {
-                              final suggestion = _suggestions[index];
-                              final text = suggestion['description'];
-                              return ListTile(
-                                leading: Icon(
-                                  suggestion['is_my_location'] == true 
-                                      ? Icons.my_location 
-                                      : Icons.location_on_outlined, 
-                                  color: suggestion['is_my_location'] == true ? Colors.blue : Colors.grey,
+                          child: Row(
+                            children: [
+                              Image.asset(option.image, width: 44, height: 44),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      option.name,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      option.description,
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: isDark ? Colors.white54 : Colors.grey,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                title: Text(
-                                  text,
+                              ),
+                              Text(
+                                _formatRupiah(option.price),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFCC5900),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+
+                    const SizedBox(height: 8),
+
+                    // Confirm Booking Action Button
+                    ElevatedButton(
+                      onPressed: _isSearching ? null : _placeOrder,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFCC5900),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 4,
+                      ),
+                      child: _isSearching
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text(
+                              "Pesan Sekarang",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ] else if (_sheetState == 'searching') ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 80,
+                            height: 80,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 5,
+                              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFCC5900)),
+                              backgroundColor: const Color(0xFFCC5900).withOpacity(0.15),
+                            ),
+                          ),
+                          Icon(
+                            _selectedVehicle == 'wiro_ride' ? Icons.motorcycle : Icons.directions_car,
+                            size: 32,
+                            color: const Color(0xFFCC5900),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      "Mencari Driver Terdekat...",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 18, 
+                        fontWeight: FontWeight.bold, 
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Mengirimkan tawaran perjalanan Anda ke driver di sekitar lokasi penjemputan.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13, 
+                        color: isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    ElevatedButton(
+                      onPressed: _cancelOrder,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[800],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 2,
+                      ),
+                      child: const Text(
+                        "Batalkan Pesanan",
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ] else if (_sheetState == 'matched') ...[
+                    const SizedBox(height: 16),
+                    // Origin & Destination Card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.circle, color: Color(0xFFCC5900), size: 14),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _pickupController.text,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    fontWeight: suggestion['is_my_location'] == true ? FontWeight.bold : FontWeight.normal,
-                                    color: suggestion['is_my_location'] == true 
-                                        ? Colors.blue 
-                                        : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : const Color(0xFF0F172A),
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                dense: true,
-                                onTap: () => _selectSuggestion(suggestion),
-                              );
-                            },
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-
-                      // Vehicle Selection List (Scrollable list downwards - 2 choices only: WiroRide & WiroCar)
-                      ..._vehicleOptions.map((option) {
-                        final isSelected = _selectedVehicle == option.id;
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedVehicle = option.id;
-                            });
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? const Color(0xFF15803D).withOpacity(0.08)
-                                  : (isDark ? const Color(0xFF1E293B) : Colors.white),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected
-                                    ? const Color(0xFF15803D)
-                                    : (isDark ? const Color(0xFF334155) : Colors.grey[200]!),
-                                width: 2,
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                // Image
-                                Image.asset(
-                                  option.image,
-                                  width: 60,
-                                  height: 45,
-                                  fit: BoxFit.contain,
-                                ),
-                                const SizedBox(width: 16),
-                                // Info
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        option.name,
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        option.description,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: isDark ? Colors.grey[400] : Colors.black54,
-                                        ),
-                                      ),
-                                      if (_distanceKm != null)
-                                        Padding(
-                                          padding: const EdgeInsets.only(top: 3),
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.route, size: 13, color: isDark ? Colors.grey[50] : Colors.grey[600]),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '~${_distanceKm!.toStringAsFixed(1)} km',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                // Price
-                                Text(
-                                  _formatRupiah(option.price),
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFCC5900), // Orange identity
-                                  ),
-                                ),
-                              ],
-                            ),
+                            ],
                           ),
-                        );
-                      }).toList(),
-
-                      const SizedBox(height: 16),
-
-                      // Confirm Booking Action Button
-                      ElevatedButton(
-                        onPressed: _isSearching ? null : _placeOrder,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFCC5900), // Orange identity
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 4,
-                        ),
-                        child: _isSearching
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : const Text(
-                                "Pesan Sekarang",
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          const Divider(height: 16, thickness: 1),
+                          Row(
+                            children: [
+                              const Icon(Icons.location_on, color: Color(0xFF002B93), size: 16),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _destinationController.text,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : const Color(0xFF0F172A),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                      ),
-                    ] else if (_sheetState == 'searching') ...[
-                      const SizedBox(height: 16),
-                      Center(
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            SizedBox(
-                              width: 80,
-                              height: 80,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 5,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFCC5900)),
-                                backgroundColor: const Color(0xFFCC5900).withOpacity(0.15),
-                              ),
-                            ),
-                            Icon(
-                              _selectedVehicle == 'wiro_ride' ? Icons.motorcycle : Icons.directions_car,
-                              size: 32,
-                              color: const Color(0xFFCC5900),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        "Mencari Driver Terdekat...",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18, 
-                          fontWeight: FontWeight.bold, 
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Mengirimkan tawaran perjalanan Anda ke driver di sekitar lokasi penjemputan.",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13, 
-                          color: isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      ElevatedButton(
-                        onPressed: _cancelOrder,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[800],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            ],
                           ),
-                          elevation: 2,
-                        ),
-                        child: const Text(
-                          "Batalkan Pesanan",
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
+                        ],
                       ),
-                    ] else if (_sheetState == 'countdown') ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        "Menunggu Konfirmasi Driver...",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18, 
-                          fontWeight: FontWeight.bold, 
-                          color: isDark ? Colors.white : const Color(0xFF0F172A),
-                        ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Driver Info Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Tawaran masuk ke hp driver. Menunggu respon konfirmasi...",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13, 
-                          color: isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: LinearProgressIndicator(
-                          value: _countdownSeconds / 15.0,
-                          minHeight: 10,
-                          backgroundColor: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE2E8F0),
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        "Sisa waktu konfirmasi: $_countdownSeconds detik",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF64748B), 
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      ElevatedButton(
-                        onPressed: _cancelOrder,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[800],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: const Color(0xFFCC5900).withOpacity(0.2),
+                            child: const Icon(Icons.person, color: Color(0xFFCC5900), size: 28),
                           ),
-                          elevation: 2,
-                        ),
-                        child: const Text(
-                          "Batalkan Pesanan",
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ] else if (_sheetState == 'matched') ...[
-                      const SizedBox(height: 16),
-                      // Alamat Jemput & Tujuan Card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.circle, color: Color(0xFFCC5900), size: 14),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _pickupController.text,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark ? Colors.white70 : const Color(0xFF0F172A),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Divider(height: 16, thickness: 1),
-                            Row(
-                              children: [
-                                const Icon(Icons.location_on, color: Color(0xFF002B93), size: 16),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    _destinationController.text,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: isDark ? Colors.white70 : const Color(0xFF0F172A),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      
-                      // Driver Info Card
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 28,
-                              backgroundColor: const Color(0xFFCC5900).withOpacity(0.2),
-                              child: const Icon(Icons.person, color: Color(0xFFCC5900), size: 28),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _matchedDriverName,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white : const Color(0xFF0F172A), 
-                                      fontSize: 16, 
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _matchedDriverVehicle,
-                                    style: TextStyle(
-                                      color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF475569), 
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0F172A),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      _matchedDriverPlate,
-                                      style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Price & Payment Method Row Card
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  "Total Tarif",
-                                  style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  _formatRupiah(_selectedVehiclePrice),
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                    color: Color(0xFFCC5900),
+                                  _matchedDriverName,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A), 
+                                    fontSize: 16, 
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                ),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  "Metode Pembayaran",
-                                  style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
-                                GestureDetector(
-                                  onTap: () async {
-                                    final nextType = _paymentType == 'qris' ? 'cash' : 'qris';
-                                    setState(() {
-                                      _paymentType = nextType;
-                                    });
-                                    final prefs = await SharedPreferences.getInstance();
-                                    await prefs.setString('active_order_payment_type', nextType);
-                                    
-                                    // Update backend payment status
-                                    if (_currentOrderId != null) {
-                                      try {
-                                        await http.post(
-                                          Uri.parse('$_backendBaseUrl/driver/order/status'),
-                                          headers: {'Content-Type': 'application/json'},
-                                          body: jsonEncode({
-                                            'order_id': _currentOrderId,
-                                            'status': 'accepted',
-                                            'payment_type': nextType,
-                                          }),
-                                        );
-                                      } catch (e) {
-                                        print("Error updating payment status on backend: $e");
-                                      }
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: _paymentType == 'qris' ? const Color(0xFF002B93) : const Color(0xFFCC5900),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          _paymentType.toUpperCase(),
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        const Icon(Icons.edit, color: Colors.white70, size: 11),
-                                      ],
-                                    ),
+                                Text(
+                                  _matchedDriverVehicle,
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white70 : Colors.black54, 
+                                    fontSize: 13,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
-                          ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              _matchedDriverPlate,
+                              style: const TextStyle(
+                                color: Colors.amber, 
+                                fontSize: 13, 
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Price & Payment Info Card
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Total Tarif",
+                                style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatRupiah(_selectedVehiclePrice),
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFCC5900),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                "Metode Pembayaran",
+                                style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                              ),
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: () async {
+                                  final nextType = _paymentType == 'cash' ? 'qris' : 'cash';
+                                  setState(() {
+                                    _paymentType = nextType;
+                                  });
+                                  if (_currentOrderId != null) {
+                                    try {
+                                      await http.post(
+                                        Uri.parse('$_backendBaseUrl/driver/order/status'),
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: jsonEncode({
+                                          'order_id': _currentOrderId,
+                                          'status': 'accepted',
+                                          'payment_type': nextType,
+                                        }),
+                                      );
+                                    } catch (e) {
+                                      print("Error updating payment status on backend: $e");
+                                    }
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: _paymentType == 'qris' ? const Color(0xFF002B93) : const Color(0xFFCC5900),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _paymentType.toUpperCase(),
+                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.edit, color: Colors.white70, size: 11),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    ElevatedButton(
+                      onPressed: () async {
+                        await _cancelOrder();
+                        if (mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[800],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 2,
+                      ),
+                      child: const SizedBox(
+                        width: double.infinity,
+                        child: Text(
+                          "Batalkan Pesanan",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () async {
-                          await _cancelOrder();
-                          if (mounted) {
-                            Navigator.pop(context);
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red[800],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 2,
-                        ),
-                        child: const SizedBox(
-                          width: double.infinity,
-                          child: Text(
-                            "Batalkan Pesanan",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
-                ),
-              );
-            },
-          ),
+                ],
+              ),
+            ),
+          )
         ],
       ),
     );
