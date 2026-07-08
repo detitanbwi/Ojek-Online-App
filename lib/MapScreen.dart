@@ -516,6 +516,8 @@ class _MapScreenState extends State<MapScreen> {
       _activeSearchField = '';
     });
 
+    FocusScope.of(context).unfocus();
+
     // Fetch new fares estimate
     _fetchFaresEstimate();
 
@@ -826,6 +828,7 @@ class _MapScreenState extends State<MapScreen> {
                                   child: TextField(
                                     controller: _pickupController,
                                     onChanged: (val) => _fetchSuggestions(val, 'pickup'),
+                                    onSubmitted: (val) => FocusScope.of(context).unfocus(),
                                     decoration: const InputDecoration(
                                       hintText: "Cari lokasi jemput...",
                                       border: InputBorder.none,
@@ -849,6 +852,7 @@ class _MapScreenState extends State<MapScreen> {
                                   child: TextField(
                                     controller: _destinationController,
                                     onChanged: (val) => _fetchSuggestions(val, 'destination'),
+                                    onSubmitted: (val) => FocusScope.of(context).unfocus(),
                                     decoration: const InputDecoration(
                                       hintText: "Masukkan lokasi tujuan...",
                                       border: InputBorder.none,
