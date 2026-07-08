@@ -156,10 +156,39 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
     _selectedVehicle = widget.initialVehicleType == 'motor' ? 'wiro_ride' : 'wiro_car';
+    _checkAndRestoreActiveOrder();
     // Trigger location permission access and pan immediately on screen startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestLocationAccess();
     });
+  }
+
+  void _checkAndRestoreActiveOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final activeId = prefs.getInt('active_order_id');
+    if (activeId != null) {
+      setState(() {
+        _currentOrderId = activeId;
+        _sheetState = prefs.getString('active_order_status') ?? 'booking';
+        _pickupController.text = prefs.getString('active_order_origin') ?? 'Lokasi Saya';
+        _destinationController.text = prefs.getString('active_order_destination') ?? '';
+        _selectedVehiclePrice = prefs.getInt('active_order_price') ?? 0;
+        _distanceKm = prefs.getDouble('active_order_distance');
+        _paymentType = prefs.getString('active_order_payment_type') ?? 'cash';
+        _matchedDriverName = prefs.getString('active_order_driver_name') ?? '';
+        _matchedDriverVehicle = prefs.getString('active_order_driver_vehicle') ?? '';
+        _matchedDriverPlate = prefs.getString('active_order_driver_plate') ?? '';
+        
+        if (_sheetState == 'searching') {
+          _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
+            if (!mounted) return;
+            _startCountdown();
+          });
+        } else if (_sheetState == 'countdown') {
+          _startCountdown();
+        }
+      });
+    }
   }
 
   @override
@@ -235,6 +264,14 @@ class _MapScreenState extends State<MapScreen> {
       );
       final userLatLng = LatLng(position.latitude, position.longitude);
       
+      if (_currentOrderId != null) {
+        // Just pan map to pickup coordinate if active order exists
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLngZoom(_pickupLatLng ?? userLatLng, 16.0),
+        );
+        return;
+      }
+
       setState(() {
         _pickupLatLng = userLatLng;
         _pickupController.text = "Lokasi Saya";
@@ -243,6 +280,23 @@ class _MapScreenState extends State<MapScreen> {
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(userLatLng, 16.0),
       );
+
+      // Reverse geocode to find actual address name for user location
+      try {
+        final url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.latitude}&lon=${position.longitude}&zoom=18&addressdetails=1';
+        final response = await http.get(Uri.parse(url), headers: {
+          'User-Agent': 'WirojekApp/1.0'
+        });
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final displayName = data['display_name'] ?? "Lokasi Saya";
+          setState(() {
+            _pickupController.text = displayName;
+          });
+        }
+      } catch (e) {
+        print("Reverse geocode failed: $e");
+      }
       
       // Calculate/fetch initial estimates if destination already filled
       _fetchFaresEstimate();
@@ -1345,6 +1399,8 @@ class _MapScreenState extends State<MapScreen> {
           await prefs.setString('active_order_destination', _destinationController.text);
           await prefs.setInt('active_order_price', chosen.price);
           await prefs.setString('active_order_status', 'searching');
+          await prefs.setDouble('active_order_distance', _distanceKm ?? 0.0);
+          await prefs.setString('active_order_payment_type', _paymentType);
 
           // Start search simulation timer (waiting for offer to reach a driver)
           _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
@@ -1457,6 +1513,8 @@ class _MapScreenState extends State<MapScreen> {
     await prefs.remove('active_order_destination');
     await prefs.remove('active_order_price');
     await prefs.remove('active_order_status');
+    await prefs.remove('active_order_distance');
+    await prefs.remove('active_order_payment_type');
     await prefs.remove('active_order_driver_name');
     await prefs.remove('active_order_driver_vehicle');
     await prefs.remove('active_order_driver_plate');
@@ -1471,4 +1529,4 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 }
-}
+

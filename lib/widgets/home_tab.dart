@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 import '../MapScreen.dart';
 
 class HomeTab extends StatefulWidget {
@@ -26,9 +27,12 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   String? _activeOrderDestination;
   int? _activeOrderPrice;
   String? _activeOrderStatus;
+  double? _activeOrderDistance;
+
   String? _activeOrderDriverName;
   String? _activeOrderVehicle;
   String? _activeOrderPlate;
+  String _userCity = "Menentukan lokasi...";
 
   Timer? _statusCheckTimer;
 
@@ -36,12 +40,56 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     _loadActiveOrder();
+    _determineUserCity();
   }
 
   @override
   void dispose() {
     _statusCheckTimer?.cancel();
     super.dispose();
+  }
+
+  void _determineUserCity() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() => _userCity = "Banyuwangi, Indonesia");
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() => _userCity = "Banyuwangi, Indonesia");
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() => _userCity = "Banyuwangi, Indonesia");
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low);
+      final url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.latitude}&lon=${position.longitude}&zoom=10&addressdetails=1';
+      final response = await http.get(Uri.parse(url), headers: {
+        'User-Agent': 'WirojekApp/1.0'
+      });
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final address = data['address'];
+        final city = address['city'] ?? address['town'] ?? address['municipality'] ?? address['county'] ?? address['state'] ?? 'Banyuwangi';
+        setState(() {
+          _userCity = "$city, Indonesia";
+        });
+      } else {
+        setState(() => _userCity = "Banyuwangi, Indonesia");
+      }
+    } catch (e) {
+      print("Error determining city: $e");
+      setState(() => _userCity = "Banyuwangi, Indonesia");
+    }
   }
 
   void _loadActiveOrder() async {
@@ -52,6 +100,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       _activeOrderDestination = prefs.getString('active_order_destination');
       _activeOrderPrice = prefs.getInt('active_order_price');
       _activeOrderStatus = prefs.getString('active_order_status');
+      _activeOrderDistance = prefs.getDouble('active_order_distance');
       _activeOrderDriverName = prefs.getString('active_order_driver_name');
       _activeOrderVehicle = prefs.getString('active_order_driver_vehicle');
       _activeOrderPlate = prefs.getString('active_order_driver_plate');
@@ -109,26 +158,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     await prefs.remove('active_order_destination');
     await prefs.remove('active_order_price');
     await prefs.remove('active_order_status');
+    await prefs.remove('active_order_distance');
+    await prefs.remove('active_order_payment_type');
     await prefs.remove('active_order_driver_name');
     await prefs.remove('active_order_driver_vehicle');
     await prefs.remove('active_order_driver_plate');
     _loadActiveOrder();
   }
 
-  void _cancelActiveOrder() async {
-    if (_activeOrderId == null) return;
-    try {
-      await http.post(Uri.parse('https://ojek.wirodev.com/api/customer/orders/$_activeOrderId/cancel'));
-    } catch (e) {
-      print("Error cancelling from dashboard: $e");
-    }
-    _clearActiveOrderPrefs();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pesanan berhasil dibatalkan.'), backgroundColor: Colors.redAccent),
-      );
-    }
-  }
+
 
   String _formatRupiah(int amount) {
     final formatted = amount.toString().replaceAllMapped(
@@ -200,7 +238,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                             const SizedBox(width: 3),
                             Expanded(
                               child: Text(
-                                "Banyuwangi, Indonesia",
+                                _userCity,
                                 style: TextStyle(
                                   fontSize: 11.5,
                                   color: textSecondary,
@@ -230,201 +268,177 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
               // ==================== ACTIVE ORDER CARD ====================
               if (_activeOrderId != null) ...[
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: const Color(0xFFCC5900).withOpacity(0.4),
-                      width: 1.5,
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const MapScreen(initialVehicleType: 'motor'),
+                      ),
+                    ).then((_) => _loadActiveOrder());
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: const Color(0xFFCC5900).withOpacity(0.4),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFCC5900).withOpacity(0.1),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        )
+                      ],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFCC5900).withOpacity(0.1),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
-                      )
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.greenAccent,
-                                  shape: BoxShape.circle,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.greenAccent,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "Pemesanan Aktif Berjalan",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                  fontFamily: 'Plus Jakarta Sans',
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Pemesanan Aktif Berjalan",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    fontFamily: 'Plus Jakarta Sans',
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          Text(
-                            _activeOrderStatus == 'accepted' ? 'Driver Ditemukan' : 'Mencari...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFFCC5900),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Origin & Destination details
-                      Row(
-                        children: [
-                          const Icon(Icons.circle, color: Color(0xFFCC5900), size: 10),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _activeOrderOrigin ?? '-',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white70 : const Color(0xFF334155),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.only(left: 4.0),
-                        child: Icon(Icons.more_vert, size: 12, color: Colors.grey),
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on, color: Color(0xFF002B93), size: 12),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _activeOrderDestination ?? '-',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark ? Colors.white70 : const Color(0xFF334155),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 24, thickness: 1),
-                      // Price & Driver details if matched
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Total Tarif",
-                                style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatRupiah(_activeOrderPrice ?? 0),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFCC5900),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (_activeOrderStatus == 'accepted' && _activeOrderDriverName != null)
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Origin & Destination details
+                        Row(
+                          children: [
+                            const Icon(Icons.circle, color: Color(0xFFCC5900), size: 10),
+                            const SizedBox(width: 10),
                             Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                              child: Text(
+                                _activeOrderOrigin ?? '-',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4.0),
+                          child: Icon(Icons.more_vert, size: 12, color: Colors.grey),
+                        ),
+                        Row(
+                          children: [
+                            const Icon(Icons.location_on, color: Color(0xFF002B93), size: 12),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _activeOrderDestination ?? '-',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark ? Colors.white70 : const Color(0xFF334155),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(height: 24, thickness: 1),
+                        // Price & Driver details if matched
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Total Tarif",
+                                  style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
                                   children: [
                                     Text(
-                                      _activeOrderDriverName!,
-                                      style: TextStyle(
-                                        fontSize: 13,
+                                      _formatRupiah(_activeOrderPrice ?? 0),
+                                      style: const TextStyle(
+                                        fontSize: 16,
                                         fontWeight: FontWeight.bold,
-                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                        color: Color(0xFFCC5900),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${_activeOrderVehicle!} • ${_activeOrderPlate!}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: isDark ? Colors.white70 : Colors.black54,
+                                    if (_activeOrderDistance != null) ...[
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "(${_activeOrderDistance!.toStringAsFixed(1)} km)",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isDark ? Colors.white54 : Colors.black54,
+                                        ),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    ],
                                   ],
                                 ),
-                              ),
+                              ],
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => const MapScreen(initialVehicleType: 'motor'),
+                            if (_activeOrderStatus == 'accepted' && _activeOrderDriverName != null)
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 16.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        _activeOrderDriverName!,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${_activeOrderVehicle!} • ${_activeOrderPlate!}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isDark ? Colors.white70 : Colors.black54,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
                                   ),
-                                ).then((_) => _loadActiveOrder());
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF002B93),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
                               ),
-                              child: const Text("Lihat Peta", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: _cancelActiveOrder,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red[800],
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                              child: const Text("Batalkan", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
