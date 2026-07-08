@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
 import '../MapScreen.dart';
 
 class HomeTab extends StatefulWidget {
@@ -16,6 +20,123 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   double _wiroRideScale = 1.0;
   double _wiroCarScale = 1.0;
+
+  int? _activeOrderId;
+  String? _activeOrderOrigin;
+  String? _activeOrderDestination;
+  int? _activeOrderPrice;
+  String? _activeOrderStatus;
+  String? _activeOrderDriverName;
+  String? _activeOrderVehicle;
+  String? _activeOrderPlate;
+
+  Timer? _statusCheckTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActiveOrder();
+  }
+
+  @override
+  void dispose() {
+    _statusCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  void _loadActiveOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _activeOrderId = prefs.getInt('active_order_id');
+      _activeOrderOrigin = prefs.getString('active_order_origin');
+      _activeOrderDestination = prefs.getString('active_order_destination');
+      _activeOrderPrice = prefs.getInt('active_order_price');
+      _activeOrderStatus = prefs.getString('active_order_status');
+      _activeOrderDriverName = prefs.getString('active_order_driver_name');
+      _activeOrderVehicle = prefs.getString('active_order_driver_vehicle');
+      _activeOrderPlate = prefs.getString('active_order_driver_plate');
+    });
+
+    if (_activeOrderId != null) {
+      _startStatusChecking();
+    } else {
+      _statusCheckTimer?.cancel();
+    }
+  }
+
+  void _startStatusChecking() {
+    _statusCheckTimer?.cancel();
+    _statusCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      if (_activeOrderId == null) {
+        timer.cancel();
+        return;
+      }
+      try {
+        final response = await http.get(Uri.parse('https://ojek.wirodev.com/api/customer/orders/$_activeOrderId/status'));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true) {
+            final status = data['data']['status'];
+            if (status == 'completed' || status == 'cancelled' || status == 'rejected') {
+              timer.cancel();
+              _clearActiveOrderPrefs();
+            } else if (status == 'accepted') {
+              final driver = data['data']['driver'];
+              if (driver != null) {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('active_order_status', 'accepted');
+                await prefs.setString('active_order_driver_name', driver['name'] ?? 'Driver');
+                await prefs.setString('active_order_driver_vehicle', driver['vehicle_type'] == 'motor' ? 'Honda Beat (Hitam)' : 'Toyota Avanza (Putih)');
+                await prefs.setString('active_order_driver_plate', 'DK ${driver['id'] * 17} XY');
+                _loadActiveOrder();
+              }
+            }
+          }
+        } else if (response.statusCode == 404) {
+          timer.cancel();
+          _clearActiveOrderPrefs();
+        }
+      } catch (e) {
+        print("Error checking status: $e");
+      }
+    });
+  }
+
+  void _clearActiveOrderPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('active_order_id');
+    await prefs.remove('active_order_origin');
+    await prefs.remove('active_order_destination');
+    await prefs.remove('active_order_price');
+    await prefs.remove('active_order_status');
+    await prefs.remove('active_order_driver_name');
+    await prefs.remove('active_order_driver_vehicle');
+    await prefs.remove('active_order_driver_plate');
+    _loadActiveOrder();
+  }
+
+  void _cancelActiveOrder() async {
+    if (_activeOrderId == null) return;
+    try {
+      await http.post(Uri.parse('https://ojek.wirodev.com/api/customer/orders/$_activeOrderId/cancel'));
+    } catch (e) {
+      print("Error cancelling from dashboard: $e");
+    }
+    _clearActiveOrderPrefs();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pesanan berhasil dibatalkan.'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  String _formatRupiah(int amount) {
+    final formatted = amount.toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]}.',
+    );
+    return 'Rp $formatted';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +227,207 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ],
               ),
               const SizedBox(height: 20),
+
+              // ==================== ACTIVE ORDER CARD ====================
+              if (_activeOrderId != null) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: const Color(0xFFCC5900).withOpacity(0.4),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFCC5900).withOpacity(0.1),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Colors.greenAccent,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Pemesanan Aktif Berjalan",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                  fontFamily: 'Plus Jakarta Sans',
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            _activeOrderStatus == 'accepted' ? 'Driver Ditemukan' : 'Mencari...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFCC5900),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Origin & Destination details
+                      Row(
+                        children: [
+                          const Icon(Icons.circle, color: Color(0xFFCC5900), size: 10),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _activeOrderOrigin ?? '-',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white70 : const Color(0xFF334155),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4.0),
+                        child: Icon(Icons.more_vert, size: 12, color: Colors.grey),
+                      ),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on, color: Color(0xFF002B93), size: 12),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _activeOrderDestination ?? '-',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? Colors.white70 : const Color(0xFF334155),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24, thickness: 1),
+                      // Price & Driver details if matched
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Total Tarif",
+                                style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatRupiah(_activeOrderPrice ?? 0),
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFFCC5900),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_activeOrderStatus == 'accepted' && _activeOrderDriverName != null)
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      _activeOrderDriverName!,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${_activeOrderVehicle!} • ${_activeOrderPlate!}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: isDark ? Colors.white70 : Colors.black54,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => const MapScreen(initialVehicleType: 'motor'),
+                                  ),
+                                ).then((_) => _loadActiveOrder());
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF002B93),
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text("Lihat Peta", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: _cancelActiveOrder,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red[800],
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text("Batalkan", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // ==================== 2. WIROJEK WALLET CARD ====================
               Container(
@@ -223,13 +545,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                       onTapDown: (_) => setState(() => _wiroRideScale = 0.95),
                       onTapUp: (_) => setState(() => _wiroRideScale = 1.0),
                       onTapCancel: () => setState(() => _wiroRideScale = 1.0),
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const MapScreen(initialVehicleType: 'motor'),
                           ),
                         );
+                        _loadActiveOrder();
                       },
                       child: Transform.scale(
                         scale: _wiroRideScale,
@@ -304,13 +627,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                       onTapDown: (_) => setState(() => _wiroCarScale = 0.95),
                       onTapUp: (_) => setState(() => _wiroCarScale = 1.0),
                       onTapCancel: () => setState(() => _wiroCarScale = 1.0),
-                      onTap: () {
-                        Navigator.push(
+                      onTap: () async {
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => const MapScreen(initialVehicleType: 'mobil'),
                           ),
                         );
+                        _loadActiveOrder();
                       },
                       child: Transform.scale(
                         scale: _wiroCarScale,

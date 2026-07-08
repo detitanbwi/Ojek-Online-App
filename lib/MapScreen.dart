@@ -59,6 +59,8 @@ class _MapScreenState extends State<MapScreen> {
   String _matchedDriverName = '';
   String _matchedDriverVehicle = '';
   String _matchedDriverPlate = '';
+  int _selectedVehiclePrice = 0;
+  String _paymentType = 'cash'; // 'cash' or 'qris'
 
   // Route polyline state
   List<LatLng> _fullRoutePoints = [];
@@ -1063,22 +1065,59 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ] else if (_sheetState == 'matched') ...[
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.check_circle, color: Colors.greenAccent, size: 26),
-                          const SizedBox(width: 8),
-                          Text(
-                            "Driver Ditemukan!",
-                            style: TextStyle(
-                              fontSize: 20, 
-                              fontWeight: FontWeight.bold, 
-                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      // Alamat Jemput & Tujuan Card
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.circle, color: Color(0xFFCC5900), size: 14),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _pickupController.text,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white70 : const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+                            const Divider(height: 16, thickness: 1),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on, color: Color(0xFF002B93), size: 16),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _destinationController.text,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: isDark ? Colors.white70 : const Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
+                      
+                      // Driver Info Card
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -1132,7 +1171,96 @@ class _MapScreenState extends State<MapScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 16),
+
+                      // Price & Payment Method Row Card
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Total Tarif",
+                                  style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _formatRupiah(_selectedVehiclePrice),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFCC5900),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  "Metode Pembayaran",
+                                  style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11),
+                                ),
+                                const SizedBox(height: 4),
+                                GestureDetector(
+                                  onTap: () async {
+                                    final nextType = _paymentType == 'qris' ? 'cash' : 'qris';
+                                    setState(() {
+                                      _paymentType = nextType;
+                                    });
+                                    final prefs = await SharedPreferences.getInstance();
+                                    await prefs.setString('active_order_payment_type', nextType);
+                                    
+                                    // Update backend payment status
+                                    if (_currentOrderId != null) {
+                                      try {
+                                        await http.post(
+                                          Uri.parse('$_backendBaseUrl/driver/order/status'),
+                                          headers: {'Content-Type': 'application/json'},
+                                          body: jsonEncode({
+                                            'order_id': _currentOrderId,
+                                            'status': 'accepted',
+                                            'payment_type': nextType,
+                                          }),
+                                        );
+                                      } catch (e) {
+                                        print("Error updating payment status on backend: $e");
+                                      }
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: _paymentType == 'qris' ? const Color(0xFF002B93) : const Color(0xFFCC5900),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _paymentType.toUpperCase(),
+                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(Icons.edit, color: Colors.white70, size: 11),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: () {
                           setState(() {
@@ -1180,12 +1308,13 @@ class _MapScreenState extends State<MapScreen> {
       return;
     }
 
+    final chosen = _vehicleOptions.firstWhere((o) => o.id == _selectedVehicle);
+
     setState(() {
+      _selectedVehiclePrice = chosen.price;
       _isSearching = true;
       _sheetState = 'searching';
     });
-
-    final chosen = _vehicleOptions.firstWhere((o) => o.id == _selectedVehicle);
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -1200,7 +1329,7 @@ class _MapScreenState extends State<MapScreen> {
           'origin': _pickupController.text,
           'destination': _destinationController.text,
           'price': chosen.price,
-          'payment_type': 'cash',
+          'payment_type': _paymentType,
           'service_type': _selectedVehicle,
         }),
       );
@@ -1209,6 +1338,13 @@ class _MapScreenState extends State<MapScreen> {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           _currentOrderId = data['data']['id'];
+
+          // Save active order details to SharedPreferences for HomeTab dashboard card
+          await prefs.setInt('active_order_id', _currentOrderId!);
+          await prefs.setString('active_order_origin', _pickupController.text);
+          await prefs.setString('active_order_destination', _destinationController.text);
+          await prefs.setInt('active_order_price', chosen.price);
+          await prefs.setString('active_order_status', 'searching');
 
           // Start search simulation timer (waiting for offer to reach a driver)
           _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
@@ -1265,6 +1401,7 @@ class _MapScreenState extends State<MapScreen> {
           body: jsonEncode({
             'order_id': _currentOrderId,
             'status': 'accepted',
+            'payment_type': _paymentType,
           }),
         );
       } catch (e) {
@@ -1285,6 +1422,13 @@ class _MapScreenState extends State<MapScreen> {
         _matchedDriverPlate = "DK 1982 TXY";
       }
     });
+
+    // Save matched driver info to SharedPreferences for HomeTab dashboard card
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('active_order_status', 'accepted');
+    await prefs.setString('active_order_driver_name', _matchedDriverName);
+    await prefs.setString('active_order_driver_vehicle', _matchedDriverVehicle);
+    await prefs.setString('active_order_driver_plate', _matchedDriverPlate);
   }
 
   Future<void> _cancelOrder() async {
@@ -1307,6 +1451,16 @@ class _MapScreenState extends State<MapScreen> {
       _currentOrderId = null;
     });
 
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('active_order_id');
+    await prefs.remove('active_order_origin');
+    await prefs.remove('active_order_destination');
+    await prefs.remove('active_order_price');
+    await prefs.remove('active_order_status');
+    await prefs.remove('active_order_driver_name');
+    await prefs.remove('active_order_driver_vehicle');
+    await prefs.remove('active_order_driver_plate');
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1317,5 +1471,4 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 }
-
-
+}
