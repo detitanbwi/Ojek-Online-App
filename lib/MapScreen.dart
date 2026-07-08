@@ -50,6 +50,11 @@ class _MapScreenState extends State<MapScreen> {
   double? _distanceKm;
   bool _isSearching = false;
   String _sheetState = 'booking'; // 'booking', 'searching', 'countdown', 'matched'
+  bool _isSelectingFromMap = false;
+  LatLng _mapCenterLatLng = const LatLng(-6.2088, 106.8456);
+  String _mapSelectAddress = "Mendapatkan alamat...";
+  bool _isReverseGeocodingMapCenter = false;
+  Timer? _debounceGeocodeTimer;
   int _countdownSeconds = 15;
   Timer? _countdownTimer;
   Timer? _searchSimulationTimer;
@@ -214,6 +219,7 @@ class _MapScreenState extends State<MapScreen> {
     _statusCheckTimer?.cancel();
     _pickupController.dispose();
     _destinationController.dispose();
+    _debounceGeocodeTimer?.cancel();
     super.dispose();
   }
 
@@ -401,7 +407,7 @@ class _MapScreenState extends State<MapScreen> {
     // Initialise results list with "Lokasi Saya" / "My Location" option at the very top
     List<dynamic> results = [];
     results.add({
-      "description": "Lokasi Saya",
+      "description": "Pilih lokasi di peta",
       "is_my_location": true,
       "lat": userLocation.latitude,
       "lng": userLocation.longitude,
@@ -466,12 +472,22 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  // Select place from suggestion list
   Future<void> _selectSuggestion(dynamic suggestion) async {
     final String description = suggestion['description'];
     LatLng targetLatLng;
 
-    if (suggestion['is_my_location'] == true || suggestion['is_mock'] == true) {
+    if (suggestion['is_my_location'] == true) {
+      FocusScope.of(context).unfocus();
+      setState(() {
+        _isSelectingFromMap = true;
+        _suggestions = [];
+        _mapCenterLatLng = _pickupLatLng ?? const LatLng(-6.2088, 106.8456);
+      });
+      _reverseGeocodeMapCenter();
+      return;
+    }
+
+    if (suggestion['is_mock'] == true) {
       targetLatLng = LatLng(suggestion['lat'], suggestion['lng']);
     } else {
       // Fetch coordinates via Place Details API for real Google predictions
@@ -527,6 +543,35 @@ class _MapScreenState extends State<MapScreen> {
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(targetLatLng, 16.0),
       );
+    }
+  void _reverseGeocodeMapCenter() async {
+    if (!_isSelectingFromMap) return;
+    setState(() {
+      _isReverseGeocodingMapCenter = true;
+      _mapSelectAddress = "Mendapatkan alamat...";
+    });
+
+    try {
+      final url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=${_mapCenterLatLng.latitude}&lon=${_mapCenterLatLng.longitude}&zoom=18&addressdetails=1';
+      final response = await http.get(Uri.parse(url), headers: {'User-Agent': 'WirojekApp/1.0'});
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final displayName = data['display_name'] ?? "Lokasi Pilihan";
+        setState(() {
+          _mapSelectAddress = displayName;
+          _isReverseGeocodingMapCenter = false;
+        });
+      } else {
+        setState(() {
+          _mapSelectAddress = "Lokasi Pilihan (${_mapCenterLatLng.latitude.toStringAsFixed(4)}, ${_mapCenterLatLng.longitude.toStringAsFixed(4)})";
+          _isReverseGeocodingMapCenter = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _mapSelectAddress = "Lokasi Pilihan (${_mapCenterLatLng.latitude.toStringAsFixed(4)}, ${_mapCenterLatLng.longitude.toStringAsFixed(4)})";
+        _isReverseGeocodingMapCenter = false;
+      });
     }
   }
 
@@ -728,6 +773,7 @@ class _MapScreenState extends State<MapScreen> {
 
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           // Fullscreen Google Map
@@ -756,10 +802,22 @@ class _MapScreenState extends State<MapScreen> {
                 });
               }
             },
+            onCameraMove: (position) {
+              _mapCenterLatLng = position.target;
+            },
+            onCameraIdle: () {
+              if (_isSelectingFromMap) {
+                _debounceGeocodeTimer?.cancel();
+                _debounceGeocodeTimer = Timer(const Duration(milliseconds: 650), () {
+                  _reverseGeocodeMapCenter();
+                });
+              }
+            },
           ),
 
           // Top Panel: Back Button & Route Input Card
-          Positioned(
+          if (!_isSelectingFromMap)
+            Positioned(
             top: MediaQuery.of(context).padding.top + 16,
             left: 16,
             right: 16,
@@ -965,7 +1023,8 @@ class _MapScreenState extends State<MapScreen> {
           ),
 
           // Custom Bottom Card (Wraps Content Height Dynamically)
-          Positioned(
+          if (!_isSelectingFromMap)
+            Positioned(
             left: 0,
             right: 0,
             bottom: 0,
@@ -1386,7 +1445,123 @@ class _MapScreenState extends State<MapScreen> {
                 ],
               ),
             ),
-          )
+          ),
+
+          if (_isSelectingFromMap) ...[
+            // Anchored Center Pin with a Card on top
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Floating Card above the pin
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        )
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _activeSearchField == 'pickup' ? "PILIH LOKASI JEMPUT" : "PILIH LOKASI TUJUAN",
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFCC5900),
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _mapSelectAddress,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: _isReverseGeocodingMapCenter ? null : () {
+                            setState(() {
+                              if (_activeSearchField == 'pickup') {
+                                _pickupLatLng = _mapCenterLatLng;
+                                _pickupController.text = _mapSelectAddress;
+                              } else {
+                                _destinationLatLng = _mapCenterLatLng;
+                                _destinationController.text = _mapSelectAddress;
+                              }
+                              _isSelectingFromMap = false;
+                              _suggestions = [];
+                            });
+
+                            // Re-calculate route if both are set
+                            if (_pickupLatLng != null && _destinationLatLng != null) {
+                              _fetchRoutePolyline();
+                              _fitBoundsForRoute();
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF002B93),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text("Pilih Tempat Ini", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Pin Icon
+                  const Icon(
+                    Icons.location_on,
+                    size: 44,
+                    color: Colors.red,
+                  ),
+                ],
+              ),
+            ),
+            
+            // Cancel map selection floating button
+            Positioned(
+              bottom: 24,
+              left: 24,
+              right: 24,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _isSelectingFromMap = false;
+                    _suggestions = [];
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  foregroundColor: isDark ? Colors.white : const Color(0xFF0F172A),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  side: BorderSide(color: isDark ? const Color(0xFF334155) : Colors.grey[300]!),
+                ),
+                child: const Text("Kembali ke Pencarian", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
         ],
       ),
     );
