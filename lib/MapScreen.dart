@@ -970,16 +970,23 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      const Text(
+                      Text(
                         "Mencari Driver Terdekat...",
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: TextStyle(
+                          fontSize: 18, 
+                          fontWeight: FontWeight.bold, 
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         "Mengirimkan tawaran perjalanan Anda ke driver di sekitar lokasi penjemputan.",
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6)),
+                        style: TextStyle(
+                          fontSize: 13, 
+                          color: isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
+                        ),
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
@@ -1000,16 +1007,23 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ] else if (_sheetState == 'countdown') ...[
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         "Menunggu Konfirmasi Driver...",
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        style: TextStyle(
+                          fontSize: 18, 
+                          fontWeight: FontWeight.bold, 
+                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         "Tawaran masuk ke hp driver. Menunggu respon konfirmasi...",
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6)),
+                        style: TextStyle(
+                          fontSize: 13, 
+                          color: isDark ? Colors.white.withOpacity(0.6) : const Color(0xFF475569),
+                        ),
                       ),
                       const SizedBox(height: 24),
                       ClipRRect(
@@ -1017,7 +1031,7 @@ class _MapScreenState extends State<MapScreen> {
                         child: LinearProgressIndicator(
                           value: _countdownSeconds / 15.0,
                           minHeight: 10,
-                          backgroundColor: Colors.white.withOpacity(0.1),
+                          backgroundColor: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE2E8F0),
                           valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
                         ),
                       ),
@@ -1025,7 +1039,10 @@ class _MapScreenState extends State<MapScreen> {
                       Text(
                         "Sisa waktu konfirmasi: $_countdownSeconds detik",
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                        style: TextStyle(
+                          color: isDark ? Colors.white.withOpacity(0.5) : const Color(0xFF64748B), 
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 32),
                       ElevatedButton(
@@ -1046,14 +1063,18 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     ] else if (_sheetState == 'matched') ...[
                       const SizedBox(height: 16),
-                      const Row(
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check_circle, color: Colors.greenAccent, size: 26),
-                          SizedBox(width: 8),
+                          const Icon(Icons.check_circle, color: Colors.greenAccent, size: 26),
+                          const SizedBox(width: 8),
                           Text(
                             "Driver Ditemukan!",
-                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: TextStyle(
+                              fontSize: 20, 
+                              fontWeight: FontWeight.bold, 
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
                           ),
                         ],
                       ),
@@ -1063,7 +1084,7 @@ class _MapScreenState extends State<MapScreen> {
                         decoration: BoxDecoration(
                           color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.white.withOpacity(0.05)),
+                          border: Border.all(color: isDark ? Colors.white.withOpacity(0.05) : const Color(0xFFE2E8F0)),
                         ),
                         child: Row(
                           children: [
@@ -1079,12 +1100,19 @@ class _MapScreenState extends State<MapScreen> {
                                 children: [
                                   Text(
                                     _matchedDriverName,
-                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A), 
+                                      fontSize: 16, 
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     _matchedDriverVehicle,
-                                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
+                                    style: TextStyle(
+                                      color: isDark ? Colors.white.withOpacity(0.7) : const Color(0xFF475569), 
+                                      fontSize: 13,
+                                    ),
                                   ),
                                   const SizedBox(height: 8),
                                   Container(
