@@ -53,6 +53,7 @@ class _MapScreenState extends State<MapScreen> {
   int _countdownSeconds = 15;
   Timer? _countdownTimer;
   Timer? _searchSimulationTimer;
+  Timer? _statusCheckTimer;
   int? _currentOrderId;
 
   // Matched Driver Details
@@ -192,12 +193,7 @@ class _MapScreenState extends State<MapScreen> {
         _matchedDriverPlate = prefs.getString('active_order_driver_plate') ?? '';
         
         if (_sheetState == 'searching') {
-          _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
-            if (!mounted) return;
-            _startCountdown();
-          });
-        } else if (_sheetState == 'countdown') {
-          _startCountdown();
+          _startStatusChecking();
         }
       });
 
@@ -215,6 +211,7 @@ class _MapScreenState extends State<MapScreen> {
     _polylineAnimTimer?.cancel();
     _countdownTimer?.cancel();
     _searchSimulationTimer?.cancel();
+    _statusCheckTimer?.cancel();
     _pickupController.dispose();
     _destinationController.dispose();
     super.dispose();
@@ -700,6 +697,26 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    double minSize = 0.38;
+    double maxSize = 0.85;
+    double initialSize = 0.38;
+    bool doSnap = true;
+    List<double> snaps = [0.38, 0.85];
+
+    if (_sheetState == 'searching') {
+      minSize = 0.38;
+      maxSize = 0.38;
+      initialSize = 0.38;
+      doSnap = false;
+      snaps = [0.38];
+    } else if (_sheetState == 'matched') {
+      minSize = 0.52;
+      maxSize = 0.85;
+      initialSize = 0.52;
+      doSnap = true;
+      snaps = [0.52, 0.85];
+    }
+
     return Scaffold(
       body: Stack(
         children: [
@@ -775,11 +792,11 @@ class _MapScreenState extends State<MapScreen> {
 
           // Draggable Scrollable Sheet for Booking Detail Inputs & Options
           DraggableScrollableSheet(
-            initialChildSize: 0.38,
-            minChildSize: 0.38,
-            maxChildSize: 0.85,
-            snap: true,
-            snapSizes: const [0.38, 0.85],
+            initialChildSize: initialSize,
+            minChildSize: minSize,
+            maxChildSize: maxSize,
+            snap: doSnap,
+            snapSizes: snaps,
             builder: (context, scrollController) {
               return Container(
                 decoration: BoxDecoration(
@@ -1459,94 +1476,68 @@ class _MapScreenState extends State<MapScreen> {
             await prefs.setDouble('active_order_destination_lng', _destinationLatLng!.longitude);
           }
 
-          // Start search simulation timer (waiting for offer to reach a driver)
-          _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
-            if (!mounted) return;
-            _startCountdown();
-          });
+          _startStatusChecking();
           return;
         }
       }
       throw Exception("Server returned non-201 or success false");
     } catch (e) {
       print("Failed to place order via API: $e");
-      
-      // Fallback search simulation
-      _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
-        if (!mounted) return;
-        _startCountdown();
-      });
     }
   }
 
-  void _startCountdown() {
-    setState(() {
-      _sheetState = 'countdown';
-      _countdownSeconds = 15;
-    });
-
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      setState(() {
-        if (_countdownSeconds > 0) {
-          _countdownSeconds--;
-          // Simulate driver acceptance at second 10
-          if (_countdownSeconds == 10) {
-            timer.cancel();
-            _simulateDriverAcceptance();
-          }
-        } else {
-          timer.cancel();
-          _simulateDriverAcceptance();
-        }
-      });
-    });
-  }
-
-  void _simulateDriverAcceptance() async {
-    _countdownTimer?.cancel();
-    
-    if (_currentOrderId != null) {
+  void _startStatusChecking() {
+    _statusCheckTimer?.cancel();
+    _statusCheckTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+      if (_currentOrderId == null) {
+        timer.cancel();
+        return;
+      }
       try {
-        await http.post(
-          Uri.parse('$_backendBaseUrl/driver/order/status'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'order_id': _currentOrderId,
-            'status': 'accepted',
-            'payment_type': _paymentType,
-          }),
-        );
+        final response = await http.get(Uri.parse('$_backendBaseUrl/customer/orders/$_currentOrderId/status'));
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          if (data['success'] == true) {
+            final orderData = data['data'];
+            final status = orderData['status'];
+            if (status == 'accepted') {
+              timer.cancel();
+              final driver = orderData['driver'];
+              if (driver != null) {
+                final dName = driver['name'] ?? 'Driver';
+                final dVehicle = driver['vehicle_type'] == 'motor' ? 'Honda Beat (Hitam)' : 'Toyota Avanza (Putih)';
+                final dPlate = 'DK ${driver['id'] * 17} XY';
+                
+                setState(() {
+                  _sheetState = 'matched';
+                  _isSearching = false;
+                  _matchedDriverName = dName;
+                  _matchedDriverVehicle = dVehicle;
+                  _matchedDriverPlate = dPlate;
+                });
+                
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('active_order_status', 'accepted');
+                await prefs.setString('active_order_driver_name', dName);
+                await prefs.setString('active_order_driver_vehicle', dVehicle);
+                await prefs.setString('active_order_driver_plate', dPlate);
+              }
+            } else if (status == 'cancelled' || status == 'rejected') {
+              timer.cancel();
+              _cancelOrder();
+            }
+          }
+        }
       } catch (e) {
-        print("Failed to update status on simulation: $e");
-      }
-    }
-
-    setState(() {
-      _sheetState = 'matched';
-      _isSearching = false;
-      if (_selectedVehicle == 'wiro_ride') {
-        _matchedDriverName = "Budi Santoso";
-        _matchedDriverVehicle = "Honda Beat (Hitam)";
-        _matchedDriverPlate = "DK 3829 SFG";
-      } else {
-        _matchedDriverName = "Andi Wijaya";
-        _matchedDriverVehicle = "Toyota Avanza (Putih)";
-        _matchedDriverPlate = "DK 1982 TXY";
+        print("Error checking order status on map screen: $e");
       }
     });
-
-    // Save matched driver info to SharedPreferences for HomeTab dashboard card
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('active_order_status', 'accepted');
-    await prefs.setString('active_order_driver_name', _matchedDriverName);
-    await prefs.setString('active_order_driver_vehicle', _matchedDriverVehicle);
-    await prefs.setString('active_order_driver_plate', _matchedDriverPlate);
   }
 
   Future<void> _cancelOrder() async {
     _countdownTimer?.cancel();
     _searchSimulationTimer?.cancel();
+    _statusCheckTimer?.cancel();
 
     if (_currentOrderId != null) {
       try {
