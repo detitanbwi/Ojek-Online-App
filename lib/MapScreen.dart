@@ -721,6 +721,11 @@ class _MapScreenState extends State<MapScreen> {
             mapType: MapType.normal,
             onMapCreated: (controller) {
               _mapController = controller;
+              if (_pickupLatLng != null && _destinationLatLng != null) {
+                Future.delayed(const Duration(milliseconds: 150), () {
+                  _fitBoundsForRoute();
+                });
+              }
             },
           ),
 
