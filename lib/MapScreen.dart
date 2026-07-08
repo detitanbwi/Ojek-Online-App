@@ -169,7 +169,8 @@ class _MapScreenState extends State<MapScreen> {
     if (activeId != null) {
       setState(() {
         _currentOrderId = activeId;
-        _sheetState = prefs.getString('active_order_status') ?? 'booking';
+        final status = prefs.getString('active_order_status') ?? 'booking';
+        _sheetState = status == 'accepted' ? 'matched' : status;
         _pickupController.text = prefs.getString('active_order_origin') ?? 'Lokasi Saya';
         _destinationController.text = prefs.getString('active_order_destination') ?? '';
         _selectedVehiclePrice = prefs.getInt('active_order_price') ?? 0;
