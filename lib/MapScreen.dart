@@ -49,6 +49,16 @@ class _MapScreenState extends State<MapScreen> {
   LatLng? _destinationLatLng;
   double? _distanceKm;
   bool _isSearching = false;
+  String _sheetState = 'booking'; // 'booking', 'searching', 'countdown', 'matched'
+  int _countdownSeconds = 15;
+  Timer? _countdownTimer;
+  Timer? _searchSimulationTimer;
+  int? _currentOrderId;
+
+  // Matched Driver Details
+  String _matchedDriverName = '';
+  String _matchedDriverVehicle = '';
+  String _matchedDriverPlate = '';
 
   // Route polyline state
   List<LatLng> _fullRoutePoints = [];
@@ -153,6 +163,8 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void dispose() {
     _polylineAnimTimer?.cancel();
+    _countdownTimer?.cancel();
+    _searchSimulationTimer?.cancel();
     _pickupController.dispose();
     _destinationController.dispose();
     super.dispose();
@@ -714,225 +726,410 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Pickup & Destination Input Fields
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(20),
+                    if (_sheetState == 'booking') ...[
+                      // Pickup & Destination Input Fields
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.circle, color: Color(0xFFCC5900), size: 16),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _pickupController,
+                                    onChanged: (val) => _fetchSuggestions(val, 'pickup'),
+                                    decoration: const InputDecoration(
+                                      hintText: "Cari lokasi jemput...",
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 24, thickness: 1),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on, color: Color(0xFF002B93), size: 18),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: _destinationController,
+                                    onChanged: (val) => _fetchSuggestions(val, 'destination'),
+                                    decoration: const InputDecoration(
+                                      hintText: "Masukkan lokasi tujuan...",
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.circle, color: Color(0xFFCC5900), size: 16),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextField(
-                                  controller: _pickupController,
-                                  onChanged: (val) => _fetchSuggestions(val, 'pickup'),
-                                  decoration: const InputDecoration(
-                                    hintText: "Cari lokasi jemput...",
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                  ),
-                                ),
-                              ),
-                            ],
+                      const SizedBox(height: 12),
+
+                      // Auto-suggestion suggestions overlay list
+                      if (_suggestions.isNotEmpty)
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF1E293B) : Colors.grey[50]!,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: isDark ? const Color(0xFF334155) : Colors.grey[200]!,
+                            ),
                           ),
-                          const Divider(height: 24, thickness: 1),
-                          Row(
-                            children: [
-                              const Icon(Icons.location_on, color: Color(0xFF002B93), size: 18),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: TextField(
-                                  controller: _destinationController,
-                                  onChanged: (val) => _fetchSuggestions(val, 'destination'),
-                                  decoration: const InputDecoration(
-                                    hintText: "Masukkan lokasi tujuan...",
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                    contentPadding: EdgeInsets.zero,
-                                  ),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.all(8),
+                            itemCount: _suggestions.length,
+                            separatorBuilder: (context, index) => const Divider(height: 8),
+                            itemBuilder: (context, index) {
+                              final suggestion = _suggestions[index];
+                              final text = suggestion['description'];
+                              return ListTile(
+                                leading: Icon(
+                                  suggestion['is_my_location'] == true 
+                                      ? Icons.my_location 
+                                      : Icons.location_on_outlined, 
+                                  color: suggestion['is_my_location'] == true ? Colors.blue : Colors.grey,
+                                ),
+                                title: Text(
+                                  text,
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                    fontSize: 13,
+                                    fontWeight: suggestion['is_my_location'] == true ? FontWeight.bold : FontWeight.normal,
+                                    color: suggestion['is_my_location'] == true 
+                                        ? Colors.blue 
+                                        : (isDark ? Colors.white : const Color(0xFF0F172A)),
                                   ),
                                 ),
+                                dense: true,
+                                onTap: () => _selectSuggestion(suggestion),
+                              );
+                            },
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+
+                      // Vehicle Selection List (Scrollable list downwards - 2 choices only: WiroRide & WiroCar)
+                      ..._vehicleOptions.map((option) {
+                        final isSelected = _selectedVehicle == option.id;
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedVehicle = option.id;
+                            });
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF15803D).withOpacity(0.08)
+                                  : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFF15803D)
+                                    : (isDark ? const Color(0xFF334155) : Colors.grey[200]!),
+                                width: 2,
                               ),
-                            ],
+                            ),
+                            child: Row(
+                              children: [
+                                // Image
+                                Image.asset(
+                                  option.image,
+                                  width: 60,
+                                  height: 45,
+                                  fit: BoxFit.contain,
+                                ),
+                                const SizedBox(width: 16),
+                                // Info
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        option.name,
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        option.description,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isDark ? Colors.grey[400] : Colors.black54,
+                                        ),
+                                      ),
+                                      if (_distanceKm != null)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 3),
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.route, size: 13, color: isDark ? Colors.grey[50] : Colors.grey[600]),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '~${_distanceKm!.toStringAsFixed(1)} km',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                // Price
+                                Text(
+                                  _formatRupiah(option.price),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFCC5900), // Orange identity
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+
+                      const SizedBox(height: 16),
+
+                      // Confirm Booking Action Button
+                      ElevatedButton(
+                        onPressed: _isSearching ? null : _placeOrder,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFCC5900), // Orange identity
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 4,
+                        ),
+                        child: _isSearching
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text(
+                                "Pesan Sekarang",
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                      ),
+                    ] else if (_sheetState == 'searching') ...[
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox(
+                              width: 80,
+                              height: 80,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 5,
+                                valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFCC5900)),
+                                backgroundColor: const Color(0xFFCC5900).withOpacity(0.15),
+                              ),
+                            ),
+                            Icon(
+                              _selectedVehicle == 'wiro_ride' ? Icons.motorcycle : Icons.directions_car,
+                              size: 32,
+                              color: const Color(0xFFCC5900),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        "Mencari Driver Terdekat...",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Mengirimkan tawaran perjalanan Anda ke driver di sekitar lokasi penjemputan.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6)),
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton(
+                        onPressed: _cancelOrder,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[800],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: const Text(
+                          "Batalkan Pesanan",
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ] else if (_sheetState == 'countdown') ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        "Menunggu Konfirmasi Driver...",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Tawaran masuk ke hp driver. Menunggu respon konfirmasi...",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6)),
+                      ),
+                      const SizedBox(height: 24),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: LinearProgressIndicator(
+                          value: _countdownSeconds / 15.0,
+                          minHeight: 10,
+                          backgroundColor: Colors.white.withOpacity(0.1),
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "Sisa waktu konfirmasi: $_countdownSeconds detik",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton(
+                        onPressed: _cancelOrder,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[800],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 2,
+                        ),
+                        child: const Text(
+                          "Batalkan Pesanan",
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ] else if (_sheetState == 'matched') ...[
+                      const SizedBox(height: 16),
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.greenAccent, size: 26),
+                          SizedBox(width: 8),
+                          Text(
+                            "Driver Ditemukan!",
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Auto-suggestion suggestions overlay list
-                    if (_suggestions.isNotEmpty)
+                      const SizedBox(height: 20),
                       Container(
-                        constraints: const BoxConstraints(maxHeight: 200),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF1E293B) : Colors.grey[50]!,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isDark ? const Color(0xFF334155) : Colors.grey[200]!,
-                          ),
+                          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.white.withOpacity(0.05)),
                         ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.all(8),
-                          itemCount: _suggestions.length,
-                          separatorBuilder: (context, index) => const Divider(height: 8),
-                          itemBuilder: (context, index) {
-                            final suggestion = _suggestions[index];
-                            final text = suggestion['description'];
-                            return ListTile(
-                              leading: Icon(
-                                suggestion['is_my_location'] == true 
-                                    ? Icons.my_location 
-                                    : Icons.location_on_outlined, 
-                                color: suggestion['is_my_location'] == true ? Colors.blue : Colors.grey,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 28,
+                              backgroundColor: const Color(0xFFCC5900).withOpacity(0.2),
+                              child: const Icon(Icons.person, color: Color(0xFFCC5900), size: 28),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _matchedDriverName,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _matchedDriverVehicle,
+                                    style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      _matchedDriverPlate,
+                                      style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              title: Text(
-                                text,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: suggestion['is_my_location'] == true ? FontWeight.bold : FontWeight.normal,
-                                  color: suggestion['is_my_location'] == true 
-                                      ? Colors.blue 
-                                      : (isDark ? Colors.white : const Color(0xFF0F172A)),
-                                ),
-                              ),
-                              dense: true,
-                              onTap: () => _selectSuggestion(suggestion),
-                            );
-                          },
+                            ),
+                          ],
                         ),
                       ),
-                    const SizedBox(height: 16),
-
-                    // Vehicle Selection List (Scrollable list downwards - 2 choices only: WiroRide & WiroCar)
-                    ..._vehicleOptions.map((option) {
-                      final isSelected = _selectedVehicle == option.id;
-                      return GestureDetector(
-                        onTap: () {
+                      const SizedBox(height: 28),
+                      ElevatedButton(
+                        onPressed: () {
                           setState(() {
-                            _selectedVehicle = option.id;
+                            _sheetState = 'booking';
+                            _pickupController.text = "Lokasi Saya";
+                            _destinationController.clear();
+                            _distanceKm = null;
                           });
+                          Navigator.pop(context);
                         },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? const Color(0xFF15803D).withOpacity(0.08)
-                                : (isDark ? const Color(0xFF1E293B) : Colors.white),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFCC5900),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: isSelected
-                                  ? const Color(0xFF15803D)
-                                  : (isDark ? const Color(0xFF334155) : Colors.grey[200]!),
-                              width: 2,
-                            ),
                           ),
-                          child: Row(
-                            children: [
-                              // Image
-                              Image.asset(
-                                option.image,
-                                width: 60,
-                                height: 45,
-                                fit: BoxFit.contain,
-                              ),
-                              const SizedBox(width: 16),
-                              // Info
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      option.name,
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDark ? Colors.white : const Color(0xFF0F172A),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      option.description,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isDark ? Colors.grey[400] : Colors.black54,
-                                      ),
-                                    ),
-                                    if (_distanceKm != null)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 3),
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.route, size: 13, color: isDark ? Colors.grey[500] : Colors.grey[600]),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '~${_distanceKm!.toStringAsFixed(1)} km',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              // Price
-                              Text(
-                                _formatRupiah(option.price),
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFCC5900), // Orange identity
-                                ),
-                              ),
-                            ],
-                          ),
+                          elevation: 4,
                         ),
-                      );
-                    }).toList(),
-
-                    const SizedBox(height: 16),
-
-                    // Confirm Booking Action Button
-                    ElevatedButton(
-                      onPressed: _isSearching ? null : _placeOrder,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFCC5900), // Orange identity
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                        child: const Text(
+                          "OK",
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
-                        elevation: 4,
                       ),
-                      child: _isSearching
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Text(
-                              "Pesan Sekarang",
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                    ),
+                    ],
                   ],
                 ),
               );
@@ -943,7 +1140,7 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  // Create order via WebAPI and simulate booking search
+  // Create order via WebAPI and manage search states in bottom sheet
   Future<void> _placeOrder() async {
     if (_destinationController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -957,6 +1154,7 @@ class _MapScreenState extends State<MapScreen> {
 
     setState(() {
       _isSearching = true;
+      _sheetState = 'searching';
     });
 
     final chosen = _vehicleOptions.firstWhere((o) => o.id == _selectedVehicle);
@@ -982,38 +1180,12 @@ class _MapScreenState extends State<MapScreen> {
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          // Success: simulate driver search
-          Future.delayed(const Duration(seconds: 3), () {
-            if (!mounted) return;
-            setState(() {
-              _isSearching = false;
-            });
+          _currentOrderId = data['data']['id'];
 
-            showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                title: const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Color(0xFF15803D), size: 28),
-                    SizedBox(width: 8),
-                    Text("Driver Ditemukan!"),
-                  ],
-                ),
-                content: Text(
-                  "Driver Anda sedang menuju ke lokasi penjemputan dengan ${chosen.name}.\n\nEstimasi waktu tiba: 3 Menit.",
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.pop(context); // Go back to Home
-                    },
-                    child: const Text("OK", style: TextStyle(color: Color(0xFFCC5900), fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            );
+          // Start search simulation timer (waiting for offer to reach a driver)
+          _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
+            if (!mounted) return;
+            _startCountdown();
           });
           return;
         }
@@ -1021,39 +1193,101 @@ class _MapScreenState extends State<MapScreen> {
       throw Exception("Server returned non-201 or success false");
     } catch (e) {
       print("Failed to place order via API: $e");
-      // Fallback: search simulation
-      Future.delayed(const Duration(seconds: 3), () {
+      
+      // Fallback search simulation
+      _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
         if (!mounted) return;
-        setState(() {
-          _isSearching = false;
-        });
-
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Color(0xFF15803D), size: 28),
-                SizedBox(width: 8),
-                Text("Driver Ditemukan! (Offline)"),
-              ],
-            ),
-            content: Text(
-              "Driver Anda sedang menuju ke lokasi penjemputan dengan ${chosen.name}.\n\nEstimasi waktu tiba: 3 Menit.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                child: const Text("OK", style: TextStyle(color: Color(0xFFCC5900), fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        );
+        _startCountdown();
       });
     }
   }
+
+  void _startCountdown() {
+    setState(() {
+      _sheetState = 'countdown';
+      _countdownSeconds = 15;
+    });
+
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      setState(() {
+        if (_countdownSeconds > 0) {
+          _countdownSeconds--;
+          // Simulate driver acceptance at second 10
+          if (_countdownSeconds == 10) {
+            timer.cancel();
+            _simulateDriverAcceptance();
+          }
+        } else {
+          timer.cancel();
+          _simulateDriverAcceptance();
+        }
+      });
+    });
+  }
+
+  void _simulateDriverAcceptance() async {
+    _countdownTimer?.cancel();
+    
+    if (_currentOrderId != null) {
+      try {
+        await http.post(
+          Uri.parse('$_backendBaseUrl/driver/order/status'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'order_id': _currentOrderId,
+            'status': 'accepted',
+          }),
+        );
+      } catch (e) {
+        print("Failed to update status on simulation: $e");
+      }
+    }
+
+    setState(() {
+      _sheetState = 'matched';
+      _isSearching = false;
+      if (_selectedVehicle == 'wiro_ride') {
+        _matchedDriverName = "Budi Santoso";
+        _matchedDriverVehicle = "Honda Beat (Hitam)";
+        _matchedDriverPlate = "DK 3829 SFG";
+      } else {
+        _matchedDriverName = "Andi Wijaya";
+        _matchedDriverVehicle = "Toyota Avanza (Putih)";
+        _matchedDriverPlate = "DK 1982 TXY";
+      }
+    });
+  }
+
+  Future<void> _cancelOrder() async {
+    _countdownTimer?.cancel();
+    _searchSimulationTimer?.cancel();
+
+    if (_currentOrderId != null) {
+      try {
+        await http.post(
+          Uri.parse('$_backendBaseUrl/customer/orders/$_currentOrderId/cancel'),
+        );
+      } catch (e) {
+        print("Failed to cancel order: $e");
+      }
+    }
+
+    setState(() {
+      _sheetState = 'booking';
+      _isSearching = false;
+      _currentOrderId = null;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Pesanan berhasil dibatalkan."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 }
+
+
