@@ -167,6 +167,17 @@ class _MapScreenState extends State<MapScreen> {
     final prefs = await SharedPreferences.getInstance();
     final activeId = prefs.getInt('active_order_id');
     if (activeId != null) {
+      final oLat = prefs.getDouble('active_order_origin_lat');
+      final oLng = prefs.getDouble('active_order_origin_lng');
+      if (oLat != null && oLng != null) {
+        _pickupLatLng = LatLng(oLat, oLng);
+      }
+      final dLat = prefs.getDouble('active_order_destination_lat');
+      final dLng = prefs.getDouble('active_order_destination_lng');
+      if (dLat != null && dLng != null) {
+        _destinationLatLng = LatLng(dLat, dLng);
+      }
+
       setState(() {
         _currentOrderId = activeId;
         final status = prefs.getString('active_order_status') ?? 'booking';
@@ -189,6 +200,13 @@ class _MapScreenState extends State<MapScreen> {
           _startCountdown();
         }
       });
+
+      if (_pickupLatLng != null && _destinationLatLng != null) {
+        _fetchRoutePolyline();
+        Future.delayed(const Duration(milliseconds: 600), () {
+          _fitBoundsForRoute();
+        });
+      }
     }
   }
 
@@ -753,6 +771,8 @@ class _MapScreenState extends State<MapScreen> {
             initialChildSize: 0.38,
             minChildSize: 0.38,
             maxChildSize: 0.85,
+            snap: true,
+            snapSizes: const [0.38, 0.85],
             builder: (context, scrollController) {
               return Container(
                 decoration: BoxDecoration(
@@ -1375,13 +1395,30 @@ class _MapScreenState extends State<MapScreen> {
       final prefs = await SharedPreferences.getInstance();
       final customerId = prefs.getInt('customer_id') ?? 1;
 
+      String pickupAddress = _pickupController.text;
+      if (pickupAddress == "Lokasi Saya" && _pickupLatLng != null) {
+        try {
+          final url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=${_pickupLatLng!.latitude}&lon=${_pickupLatLng!.longitude}&zoom=18&addressdetails=1';
+          final response = await http.get(Uri.parse(url), headers: {'User-Agent': 'WirojekApp/1.0'});
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            pickupAddress = data['display_name'] ?? "Lokasi Saya";
+            setState(() {
+              _pickupController.text = pickupAddress;
+            });
+          }
+        } catch (e) {
+          print("Reverse geocode before order failed: $e");
+        }
+      }
+
       // Send real order details to Laravel WebAPI database
       final response = await http.post(
         Uri.parse('$_backendBaseUrl/customer/create-order'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'customer_id': customerId,
-          'origin': _pickupController.text,
+          'origin': pickupAddress,
           'destination': _destinationController.text,
           'price': chosen.price,
           'payment_type': _paymentType,
@@ -1396,12 +1433,21 @@ class _MapScreenState extends State<MapScreen> {
 
           // Save active order details to SharedPreferences for HomeTab dashboard card
           await prefs.setInt('active_order_id', _currentOrderId!);
-          await prefs.setString('active_order_origin', _pickupController.text);
+          await prefs.setString('active_order_origin', pickupAddress);
           await prefs.setString('active_order_destination', _destinationController.text);
           await prefs.setInt('active_order_price', chosen.price);
           await prefs.setString('active_order_status', 'searching');
           await prefs.setDouble('active_order_distance', _distanceKm ?? 0.0);
           await prefs.setString('active_order_payment_type', _paymentType);
+
+          if (_pickupLatLng != null) {
+            await prefs.setDouble('active_order_origin_lat', _pickupLatLng!.latitude);
+            await prefs.setDouble('active_order_origin_lng', _pickupLatLng!.longitude);
+          }
+          if (_destinationLatLng != null) {
+            await prefs.setDouble('active_order_destination_lat', _destinationLatLng!.latitude);
+            await prefs.setDouble('active_order_destination_lng', _destinationLatLng!.longitude);
+          }
 
           // Start search simulation timer (waiting for offer to reach a driver)
           _searchSimulationTimer = Timer(const Duration(seconds: 4), () {
