@@ -544,6 +544,8 @@ class _MapScreenState extends State<MapScreen> {
         CameraUpdate.newLatLngZoom(targetLatLng, 16.0),
       );
     }
+  }
+
   void _reverseGeocodeMapCenter() async {
     if (!_isSelectingFromMap) return;
     setState(() {
