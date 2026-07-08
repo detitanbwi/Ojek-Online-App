@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 import 'CustomerScreen.dart';
+import 'CustomerRegisterScreen.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -26,30 +27,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (!_isDriverRole) {
-      // Dummy Login for Customer
-      setState(() {
-        _isLoading = true;
-      });
-      
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('is_logged_in', true);
-      await prefs.setString('role', 'customer');
-      await prefs.setString('customer_name', email.isNotEmpty ? email.split('@')[0] : "Angga");
-      await prefs.setString('customer_email', email.isNotEmpty ? email : "angga@example.com");
-
-      Timer(const Duration(milliseconds: 600), () {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const CustomerScreen()),
-          );
-        }
-      });
-      return;
-    }
-
-    // Normal Login for Driver
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Email dan password wajib diisi!'), backgroundColor: Colors.red),
@@ -61,6 +38,59 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
 
+    if (!_isDriverRole) {
+      // Real Login for Customer
+      try {
+        final response = await http.post(
+          Uri.parse('$backendUrl/customer/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'email': email,
+            'password': password,
+          }),
+        );
+
+        final result = jsonDecode(response.body);
+
+        if (response.statusCode == 200 && result['success'] == true) {
+          final data = result['data'];
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('is_logged_in', true);
+          await prefs.setString('role', 'customer');
+          await prefs.setString('customer_name', data['name']);
+          await prefs.setString('customer_email', data['email']);
+          await prefs.setInt('customer_id', data['id']);
+
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const CustomerScreen()),
+            );
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(result['message'] ?? 'Login gagal.'), backgroundColor: Colors.red),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+      return;
+    }
+
+    // Normal Login for Driver
     final playerId = OneSignal.User.pushSubscription.id ?? '';
 
     try {
@@ -221,39 +251,37 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: const TextStyle(color: Colors.white),
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
-                          labelText: _isDriverRole ? 'Email Driver' : 'Email / Nama Customer',
+                          labelText: _isDriverRole ? 'Email Driver' : 'Email Customer',
                           labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
                           prefixIcon: const Icon(Icons.email_outlined, color: Colors.white54),
                         ),
                       ),
-                      if (_isDriverRole) ...[
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
-                            prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.white54),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                color: Colors.white54,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
+                          prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.white54),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: Colors.white54,
                             ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
                           ),
                         ),
-                      ],
+                      ),
                       const SizedBox(height: 28),
 
                       ElevatedButton(
@@ -272,10 +300,33 @@ class _LoginScreenState extends State<LoginScreen> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
                             : Text(
-                                _isDriverRole ? 'Masuk Sekarang' : 'Masuk (Simulasi)',
+                                _isDriverRole ? 'Masuk Sekarang' : 'Masuk Customer',
                                 style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
                               ),
                       ),
+                      if (!_isDriverRole) ...[
+                        const SizedBox(height: 20),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const CustomerRegisterScreen()),
+                            );
+                          },
+                          child: RichText(
+                            text: const TextSpan(
+                              text: 'Belum punya akun? ',
+                              style: TextStyle(color: Colors.white54, fontSize: 14),
+                              children: [
+                                TextSpan(
+                                  text: 'Daftar Customer',
+                                  style: TextStyle(color: Color(0xFFCC5900), fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

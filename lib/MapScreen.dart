@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MapScreen extends StatefulWidget {
   final String initialVehicleType; // 'motor' or 'mobil'
@@ -45,7 +47,13 @@ class _MapScreenState extends State<MapScreen> {
 
   LatLng? _pickupLatLng = const LatLng(-6.2088, 106.8456);
   LatLng? _destinationLatLng;
+  double? _distanceKm;
   bool _isSearching = false;
+
+  // Route polyline state
+  List<LatLng> _fullRoutePoints = [];
+  List<LatLng> _animatedRoutePoints = [];
+  Timer? _polylineAnimTimer;
 
   // Places Autocomplete API Suggestions list
   List<dynamic> _suggestions = [];
@@ -142,6 +150,14 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _polylineAnimTimer?.cancel();
+    _pickupController.dispose();
+    _destinationController.dispose();
+    super.dispose();
+  }
+
   // Calculate distance on earth's surface using Haversine formula
   double _calculateHaversineDistance(LatLng p1, LatLng p2) {
     const double earthRadiusKm = 6371.0;
@@ -227,6 +243,10 @@ class _MapScreenState extends State<MapScreen> {
 
     double distance = _calculateHaversineDistance(_pickupLatLng!, _destinationLatLng!);
 
+    setState(() {
+      _distanceKm = distance;
+    });
+
     try {
       final response = await http.post(
         Uri.parse('$_backendBaseUrl/customer/estimate-fares'),
@@ -304,14 +324,15 @@ class _MapScreenState extends State<MapScreen> {
     });
 
     try {
-      // Bias Google Places API to user location (radius 20km)
+      // Bias Google Places API to user location (radius 15km, strict bounds)
       final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/place/autocomplete/json'
         '?input=${Uri.encodeComponent(input)}'
         '&key=$_googleMapsApiKey'
         '&components=country:id'
         '&location=${userLocation.latitude},${userLocation.longitude}'
-        '&radius=20000'
+        '&radius=15000'
+        '&strictbounds=true'
       );
 
       final response = await http.get(url);
@@ -411,9 +432,145 @@ class _MapScreenState extends State<MapScreen> {
     // Fetch new fares estimate
     _fetchFaresEstimate();
 
-    // Pan map to chosen position
-    _mapController?.animateCamera(
-      CameraUpdate.newLatLngZoom(targetLatLng, 16.0),
+    // If both points are set, fetch route polyline and fit bounds
+    if (_pickupLatLng != null && _destinationLatLng != null) {
+      await _fetchRoutePolyline();
+      _fitBoundsForRoute();
+    } else {
+      // Pan map to chosen position
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(targetLatLng, 16.0),
+      );
+    }
+  }
+
+  // Fetch route from Google Directions API and animate polyline
+  Future<void> _fetchRoutePolyline() async {
+    if (_pickupLatLng == null || _destinationLatLng == null) return;
+
+    // Cancel any existing animation
+    _polylineAnimTimer?.cancel();
+    setState(() {
+      _fullRoutePoints = [];
+      _animatedRoutePoints = [];
+    });
+
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/directions/json'
+        '?origin=${_pickupLatLng!.latitude},${_pickupLatLng!.longitude}'
+        '&destination=${_destinationLatLng!.latitude},${_destinationLatLng!.longitude}'
+        '&mode=driving'
+        '&key=$_googleMapsApiKey'
+      );
+
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['status'] == 'OK' && data['routes'] != null && data['routes'].isNotEmpty) {
+          final encodedPolyline = data['routes'][0]['overview_polyline']['points'];
+          final points = _decodePolyline(encodedPolyline);
+
+          setState(() {
+            _fullRoutePoints = points;
+            _animatedRoutePoints = [];
+          });
+
+          // Animate polyline point by point
+          _animatePolyline();
+          return;
+        }
+      }
+    } catch (e) {
+      print('Directions API error: $e');
+    }
+
+    // Fallback: draw a straight line if Directions API fails
+    setState(() {
+      _fullRoutePoints = [_pickupLatLng!, _destinationLatLng!];
+      _animatedRoutePoints = [];
+    });
+    _animatePolyline();
+  }
+
+  // Animate polyline drawing from A to B
+  void _animatePolyline() {
+    _polylineAnimTimer?.cancel();
+    if (_fullRoutePoints.isEmpty) return;
+
+    int pointIndex = 0;
+    // Calculate interval: finish animation in ~1.2 seconds
+    final int intervalMs = (_fullRoutePoints.length > 1)
+        ? (1200 ~/ _fullRoutePoints.length).clamp(5, 50)
+        : 20;
+
+    _polylineAnimTimer = Timer.periodic(Duration(milliseconds: intervalMs), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (pointIndex >= _fullRoutePoints.length) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _animatedRoutePoints.add(_fullRoutePoints[pointIndex]);
+      });
+      pointIndex++;
+    });
+  }
+
+  // Decode Google encoded polyline string to list of LatLng
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> points = [];
+    int index = 0;
+    int lat = 0;
+    int lng = 0;
+
+    while (index < encoded.length) {
+      int shift = 0;
+      int result = 0;
+      int b;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1F) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1);
+      lng += dlng;
+
+      points.add(LatLng(lat / 1E5, lng / 1E5));
+    }
+    return points;
+  }
+
+  // Fit map camera to show both pickup and destination with padding
+  void _fitBoundsForRoute() {
+    if (_pickupLatLng == null || _destinationLatLng == null || _mapController == null) return;
+
+    final bounds = LatLngBounds(
+      southwest: LatLng(
+        math.min(_pickupLatLng!.latitude, _destinationLatLng!.latitude),
+        math.min(_pickupLatLng!.longitude, _destinationLatLng!.longitude),
+      ),
+      northeast: LatLng(
+        math.max(_pickupLatLng!.latitude, _destinationLatLng!.latitude),
+        math.max(_pickupLatLng!.longitude, _destinationLatLng!.longitude),
+      ),
+    );
+
+    _mapController!.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 80), // 80px padding
     );
   }
 
@@ -461,6 +618,17 @@ class _MapScreenState extends State<MapScreen> {
           GoogleMap(
             initialCameraPosition: _initialPosition,
             markers: _getMarkers(),
+            polylines: _animatedRoutePoints.length >= 2
+                ? {
+                    Polyline(
+                      polylineId: const PolylineId('route'),
+                      points: _animatedRoutePoints,
+                      color: const Color(0xFFCC5900),
+                      width: 5,
+                      patterns: [],
+                    ),
+                  }
+                : {},
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapType: MapType.normal,
@@ -704,6 +872,24 @@ class _MapScreenState extends State<MapScreen> {
                                         color: isDark ? Colors.grey[400] : Colors.black54,
                                       ),
                                     ),
+                                    if (_distanceKm != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 3),
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.route, size: 13, color: isDark ? Colors.grey[500] : Colors.grey[600]),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '~${_distanceKm!.toStringAsFixed(1)} km',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),
@@ -776,12 +962,15 @@ class _MapScreenState extends State<MapScreen> {
     final chosen = _vehicleOptions.firstWhere((o) => o.id == _selectedVehicle);
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final customerId = prefs.getInt('customer_id') ?? 1;
+
       // Send real order details to Laravel WebAPI database
       final response = await http.post(
         Uri.parse('$_backendBaseUrl/customer/create-order'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'customer_id': 1, // Default customer ID
+          'customer_id': customerId,
           'origin': _pickupController.text,
           'destination': _destinationController.text,
           'price': chosen.price,
