@@ -41,6 +41,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   String _customerName = "User";
   double _customerBalance = 0.0;
   bool _isLoadingProfile = false;
+  Map<String, dynamic>? _unratedOrder;
+  bool _isLoadingUnratedOrder = false;
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     _loadActiveOrder();
     _determineUserCity();
     _loadCustomerProfile();
+    _fetchUnratedOrder();
   }
 
   void _handleExpiredSession(SharedPreferences prefs) async {
@@ -108,6 +111,100 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           _isLoadingProfile = false;
         });
       }
+    }
+  }
+
+  Future<void> _fetchUnratedOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('customer_email') ?? '';
+    if (email.isEmpty) return;
+
+    if (mounted) {
+      setState(() {
+        _isLoadingUnratedOrder = true;
+      });
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://ojek.wirodev.com/api/customer/orders/unrated?email=$email'),
+      );
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true) {
+          if (mounted) {
+            setState(() {
+              _unratedOrder = result['data'];
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching unrated order: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingUnratedOrder = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _submitRating(int ratingValue, int orderId) async {
+    if (mounted) {
+      setState(() {
+        _isLoadingUnratedOrder = true;
+      });
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://ojek.wirodev.com/api/orders/$orderId/rate'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'rating_driver': ratingValue}),
+      );
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Terima kasih! Rating Anda berhasil dikirim.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+          await _fetchUnratedOrder();
+          _loadCustomerProfile();
+        }
+      }
+    } catch (e) {
+      debugPrint("Error submitting rating: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingUnratedOrder = false;
+        });
+      }
+    }
+  }
+
+  String _formatDateTime(String? isoString) {
+    if (isoString == null) return '';
+    try {
+      final dt = DateTime.parse(isoString).toLocal();
+      final days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+      final months = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      final dayName = days[dt.weekday - 1];
+      final monthName = months[dt.month - 1];
+      final hour = dt.hour.toString().padLeft(2, '0');
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '$dayName, ${dt.day} $monthName ${dt.year} - $hour:$minute WIB';
+    } catch (e) {
+      return isoString;
     }
   }
 
@@ -605,7 +702,146 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   ],
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
+
+              // ==================== 2.5 RATING PENDING SECTION ====================
+              if (_unratedOrder != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: colorOrange.withOpacity(0.4),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colorOrange.withOpacity(0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: colorOrange.withOpacity(0.1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.star_rounded, color: colorOrange, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Beri Rating Perjalanan Anda",
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: textPrimary,
+                                    fontFamily: 'Plus Jakarta Sans',
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "Bantu kami menilai pelayanan driver Wirojek",
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: textSecondary,
+                                    fontFamily: 'Plus Jakarta Sans',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 24, thickness: 1),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: colorNavy.withOpacity(0.1),
+                            child: const Icon(Icons.person, color: colorNavy, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _unratedOrder!['driver'] != null 
+                                      ? _unratedOrder!['driver']['name'] ?? 'Driver Wirojek' 
+                                      : 'Driver Wirojek',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _unratedOrder!['service_type'] == 'wiro_ride' ? 'Motor (WiroRide)' : 'Mobil (WiroCar)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _formatDateTime(_unratedOrder!['created_at']),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: textSecondary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      if (_isLoadingUnratedOrder)
+                        const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: colorOrange),
+                          ),
+                        )
+                      else
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(5, (index) {
+                            final starValue = index + 1;
+                            return GestureDetector(
+                              onTap: () => _submitRating(starValue, _unratedOrder!['id']),
+                              child: Icon(
+                                Icons.star_border_rounded,
+                                color: Colors.amber.shade600,
+                                size: 38,
+                              ),
+                            );
+                          }),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+              ] else ...[
+                const SizedBox(height: 28),
+              ],
 
               // ==================== 3. GRID LAYANAN UTAMA ====================
               Text(
