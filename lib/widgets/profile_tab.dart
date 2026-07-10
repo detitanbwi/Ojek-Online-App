@@ -179,6 +179,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         controller: _amountController,
                         style: TextStyle(color: inputTextColor, fontSize: 14, fontWeight: FontWeight.w600),
                         keyboardType: TextInputType.number,
+                        inputFormatters: [ThousandSeparatorInputFormatter()],
                         decoration: InputDecoration(
                           labelText: 'Nominal Penarikan (Rupiah)',
                           labelStyle: TextStyle(color: labelColor, fontSize: 13, fontWeight: FontWeight.bold),
@@ -191,7 +192,8 @@ class _ProfileTabState extends State<ProfileTab> {
                           if (val == null || val.trim().isEmpty) {
                             return 'Nominal tidak boleh kosong';
                           }
-                          final amount = double.tryParse(val);
+                          final cleanVal = val.replaceAll('.', '');
+                          final amount = double.tryParse(cleanVal);
                           if (amount == null || amount <= 0) {
                             return 'Masukkan nominal angka yang valid';
                           }
@@ -215,7 +217,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
                                   final bank = _selectedBank!;
                                   final acc = _accController.text.trim();
-                                  final amount = double.parse(_amountController.text.trim());
+                                  final amount = double.parse(_amountController.text.trim().replaceAll('.', ''));
 
                                   try {
                                     final result = await widget.onWithdraw(bank, acc, amount);

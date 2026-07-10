@@ -15,6 +15,9 @@ class DashboardTab extends StatelessWidget {
   final Color subTitleColor;
   final Color cardBg;
   final Color dividerColor;
+  final double rating;
+  final int acceptanceRate;
+  final double drivingHours;
   
   final Future<void> Function() onRefresh;
   final ValueChanged<bool> onOnlineChanged;
@@ -34,6 +37,9 @@ class DashboardTab extends StatelessWidget {
     required this.subTitleColor,
     required this.cardBg,
     required this.dividerColor,
+    required this.rating,
+    required this.acceptanceRate,
+    required this.drivingHours,
     required this.onRefresh,
     required this.onOnlineChanged,
     required this.onActiveOrderTap,
@@ -83,7 +89,7 @@ class DashboardTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${_getGreeting()}, ${driverName.split(" ")[0]}!',
+                        'Halo, ${driverName.split(" ")[0]}!',
                         style: TextStyle(
                           color: titleColor,
                           fontSize: 20,
@@ -168,9 +174,9 @@ class DashboardTab extends StatelessWidget {
                         ),
                       ),
                     ),
-                    // Blue Card content elements
+                     // Blue Card content elements
                     Padding(
-                      padding: const EdgeInsets.all(20.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
                       child: Column(
                         children: [
                           Row(
@@ -206,9 +212,7 @@ class DashboardTab extends StatelessWidget {
                                         const Icon(Icons.account_balance_wallet_rounded, color: Colors.amber, size: 16),
                                         const SizedBox(width: 6),
                                         Text(
-                                          isOnline 
-                                              ? 'Saldo: Rp ${formatPrice(driverBalance.toString().split('.')[0])}'
-                                              : 'Offline - Saldo Terkunci',
+                                          'Saldo: Rp ${formatPrice(driverBalance.toString().split('.')[0])}',
                                           style: const TextStyle(
                                             color: Colors.amber, // Clear Gold Text on Blue Card is highly readable
                                             fontSize: 14, 
@@ -223,9 +227,9 @@ class DashboardTab extends StatelessWidget {
                             ],
                           ),
                           
-                          const SizedBox(height: 18),
+                          const SizedBox(height: 10),
                           Divider(color: Colors.white.withOpacity(0.08)),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 2),
                           
                           // Online/Offline Toggle Switch Row
                           Row(
@@ -499,7 +503,7 @@ class DashboardTab extends StatelessWidget {
                             const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
                             const SizedBox(height: 6),
                             Text(
-                              '4.9 Rating',
+                              '${rating.toStringAsFixed(1)} Rating',
                               style: TextStyle(color: titleColor, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -520,7 +524,7 @@ class DashboardTab extends StatelessWidget {
                             const Icon(Icons.trending_up_rounded, color: Colors.greenAccent, size: 20),
                             const SizedBox(height: 6),
                             Text(
-                              '98% Terima',
+                              '$acceptanceRate% Terima',
                               style: TextStyle(color: titleColor, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ],
@@ -541,7 +545,7 @@ class DashboardTab extends StatelessWidget {
                             const Icon(Icons.timer_rounded, color: Colors.blueAccent, size: 20),
                             const SizedBox(height: 6),
                             Text(
-                              '5.5 Jam',
+                              '${drivingHours.toStringAsFixed(1)} Jam',
                               style: TextStyle(color: titleColor, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ],

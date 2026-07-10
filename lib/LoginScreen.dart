@@ -16,16 +16,35 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _driverEmailController = TextEditingController();
+  final TextEditingController _driverPasswordController = TextEditingController();
+  final TextEditingController _customerEmailController = TextEditingController();
+  final TextEditingController _customerPasswordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _isDriverRole = true; // Selector variable
   final String backendUrl = 'https://ojek.wirodev.com/api';
+  late PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _isDriverRole ? 0 : 1);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    _driverEmailController.dispose();
+    _driverPasswordController.dispose();
+    _customerEmailController.dispose();
+    _customerPasswordController.dispose();
+    super.dispose();
+  }
 
   void _login() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final email = _isDriverRole ? _driverEmailController.text.trim() : _customerEmailController.text.trim();
+    final password = _isDriverRole ? _driverPasswordController.text.trim() : _customerPasswordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -147,10 +166,158 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _buildFormContent({required bool isDriver}) {
+    final Color accentColor = isDriver ? const Color(0xFF002B93) : const Color(0xFFCC5900);
+    return SingleChildScrollView(
+      physics: const NeverScrollableScrollPhysics(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            isDriver ? 'MASUK DRIVER PORTAL' : 'MASUK CUSTOMER PORTAL',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF0F172A),
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Demo mode login hint section
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.amber.shade800, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Akun Demo Pengembangan:',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (isDriver) ...[
+                  Text('• wiro@sableng.com (Wiro Sableng)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
+                  Text('• bento@wirojek.com (Bento)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
+                ] else ...[
+                  Text('• angga@example.com (Angga)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
+                  Text('• dewi@example.com (Dewi Puspita)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
+                ],
+                const SizedBox(height: 4),
+                Text('Password: password123', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: isDriver ? _driverEmailController : _customerEmailController,
+            style: const TextStyle(color: Colors.black87),
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+              labelText: isDriver ? 'Email Driver' : 'Email Customer',
+              labelStyle: const TextStyle(color: Colors.black45, fontSize: 13),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.black12)),
+              prefixIcon: const Icon(Icons.email_outlined, color: Colors.black45),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: isDriver ? _driverPasswordController : _customerPasswordController,
+            obscureText: _obscurePassword,
+            style: const TextStyle(color: Colors.black87),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              labelStyle: const TextStyle(color: Colors.black45, fontSize: 13),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.black12)),
+              prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.black45),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  color: Colors.black45,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          ElevatedButton(
+            onPressed: _isLoading ? null : _login,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 4,
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : Text(
+                    isDriver ? 'Masuk Sekarang' : 'Masuk Customer',
+                    style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                  ),
+          ),
+          
+          if (!isDriver) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CustomerRegisterScreen()),
+                );
+              },
+              child: RichText(
+                text: const TextSpan(
+                  text: 'Belum punya akun? ',
+                  style: TextStyle(color: Colors.black54, fontSize: 14),
+                  children: [
+                    TextSpan(
+                      text: 'Daftar Customer',
+                      style: TextStyle(color: Color(0xFFCC5900), fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 60),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFFF8FAFC),
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -158,18 +325,18 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset('assets/logo-white.png', height: 72, fit: BoxFit.contain),
-                const SizedBox(height: 36),
+                Image.asset('assets/logo-transparent.png', height: 120, fit: BoxFit.contain),
+                const SizedBox(height: 24),
                 
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
+                    border: Border.all(color: Colors.black.withOpacity(0.05)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
+                        color: Colors.black.withOpacity(0.04),
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                       )
@@ -182,14 +349,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
+                          color: const Color(0xFFF1F5F9),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => _isDriverRole = true),
+                                onTap: () {
+                                  if (_isDriverRole) return;
+                                  setState(() => _isDriverRole = true);
+                                  _pageController.animateToPage(0, duration: const Duration(milliseconds: 250), curve: Curves.decelerate);
+                                },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 10),
                                   decoration: BoxDecoration(
@@ -200,7 +371,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text(
                                     'DRIVER',
                                     style: TextStyle(
-                                      color: _isDriverRole ? Colors.white : Colors.white54,
+                                      color: _isDriverRole ? Colors.white : Colors.black54,
                                       fontWeight: FontWeight.w900,
                                       fontSize: 13,
                                     ),
@@ -210,7 +381,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => setState(() => _isDriverRole = false),
+                                onTap: () {
+                                  if (!_isDriverRole) return;
+                                  setState(() => _isDriverRole = false);
+                                  _pageController.animateToPage(1, duration: const Duration(milliseconds: 250), curve: Curves.decelerate);
+                                },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 10),
                                   decoration: BoxDecoration(
@@ -221,7 +396,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text(
                                     'CUSTOMER',
                                     style: TextStyle(
-                                      color: !_isDriverRole ? Colors.white : Colors.white54,
+                                      color: !_isDriverRole ? Colors.white : Colors.black54,
                                       fontWeight: FontWeight.w900,
                                       fontSize: 13,
                                     ),
@@ -234,99 +409,22 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 28),
 
-                      Text(
-                        _isDriverRole ? 'MASUK DRIVER PORTAL' : 'MASUK CUSTOMER PORTAL',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      TextField(
-                        controller: _emailController,
-                        style: const TextStyle(color: Colors.white),
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          labelText: _isDriverRole ? 'Email Driver' : 'Email Customer',
-                          labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
-                          prefixIcon: const Icon(Icons.email_outlined, color: Colors.white54),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
-                          prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.white54),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                              color: Colors.white54,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-
-                      ElevatedButton(
-                        onPressed: _isLoading ? null : _login,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isDriverRole ? const Color(0xFF002B93) : const Color(0xFFCC5900),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 4,
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : Text(
-                                _isDriverRole ? 'Masuk Sekarang' : 'Masuk Customer',
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
-                              ),
-                      ),
-                      if (!_isDriverRole) ...[
-                        const SizedBox(height: 20),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const CustomerRegisterScreen()),
-                            );
+                      // PageView container with fixed height
+                      SizedBox(
+                        height: 425,
+                        child: PageView(
+                          controller: _pageController,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _isDriverRole = index == 0;
+                            });
                           },
-                          child: RichText(
-                            text: const TextSpan(
-                              text: 'Belum punya akun? ',
-                              style: TextStyle(color: Colors.white54, fontSize: 14),
-                              children: [
-                                TextSpan(
-                                  text: 'Daftar Customer',
-                                  style: TextStyle(color: Color(0xFFCC5900), fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
+                          children: [
+                            _buildFormContent(isDriver: true),
+                            _buildFormContent(isDriver: false),
+                          ],
                         ),
-                      ],
+                      ),
                     ],
                   ),
                 ),

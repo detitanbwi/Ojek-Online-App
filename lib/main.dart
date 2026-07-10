@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
 import 'OrderRequestPage.dart';
 import 'WelcomeScreen.dart';
 import 'LoginScreen.dart';
@@ -246,20 +247,6 @@ class _MyAppState extends State<MyApp> {
         },
         notificationLayout: NotificationLayout.Default,
       ),
-      actionButtons: [
-        NotificationActionButton(
-          key: 'ACCEPT',
-          label: 'Terima Orderan',
-          color: Colors.green,
-          actionType: ActionType.Default,
-        ),
-        NotificationActionButton(
-          key: 'DECLINE',
-          label: 'Tolak',
-          color: Colors.red,
-          actionType: ActionType.DismissAction,
-        ),
-      ],
     );
   }
 
@@ -320,6 +307,9 @@ class _DriverHomePageState extends State<DriverHomePage> {
   String driverId = 'DRV-0001';
   bool isLoading = false;
   double driverBalance = 0.0;
+  double driverRating = 5.0;
+  int driverAcceptanceRate = 100;
+  double driverDrivingHours = 0.0;
   late ApiService apiService;
   
   // Theme Mode
@@ -352,6 +342,103 @@ class _DriverHomePageState extends State<DriverHomePage> {
     loadSavedState();
     fetchOneSignalId();
     setupOneSignalObserver();
+
+    // Check overlay and location permissions immediately on entrance
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndRequestPermissions();
+    });
+  }
+
+  Future<void> _checkAndRequestPermissions() async {
+    // 1. Overlay permission check
+    const platform = MethodChannel('com.wirodev.wirojek/intent');
+    try {
+      final bool hasOverlayPermission = await platform.invokeMethod('checkOverlayPermission');
+      if (!hasOverlayPermission && mounted) {
+        final bool? grant = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Text('Izin Tambahan Diperlukan'),
+            content: const Text(
+              'Agar layar orderan masuk dapat otomatis muncul penuh saat Anda sedang membuka aplikasi lain, mohon aktifkan izin "Tampilkan di atas aplikasi lain" untuk aplikasi ini.'
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Nanti Saja'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Aktifkan Sekarang'),
+              ),
+            ],
+          ),
+        );
+        
+        if (grant == true) {
+          await platform.invokeMethod('requestOverlayPermission');
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking overlay permission: $e");
+    }
+
+    // 2. Location permission check
+    await _checkLocationPermission();
+  }
+
+  Future<void> _checkLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      // Driver denied location permission, show warning pop-up
+      if (mounted) {
+        await _showLocationWarningDialog(permission == LocationPermission.deniedForever);
+      }
+    }
+  }
+
+  Future<void> _showLocationWarningDialog(bool isForever) async {
+    final bool? requestAgain = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 28),
+            const SizedBox(width: 8),
+            const Text('Akses Lokasi Penting'),
+          ],
+        ),
+        content: const Text(
+          'Aplikasi memerlukan akses lokasi agar Anda dapat menerima orderan di sekitar Anda. Jika Anda menolak perizinan ini, Anda tidak akan bisa mendapatkan orderan.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abaikan', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Izinkan', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (requestAgain == true) {
+      if (isForever) {
+        await Geolocator.openAppSettings();
+      } else {
+        await _checkLocationPermission();
+      }
+    }
   }
 
   @override
@@ -373,10 +460,11 @@ class _DriverHomePageState extends State<DriverHomePage> {
       _phoneController.text = driverPhone;
     });
 
+    fetchDriverProfile();
+    fetchOrderHistory();
+    
     if (isOnline) {
-      fetchOrderHistory();
       checkActiveOrder();
-      fetchDriverProfile();
       startSyncTimer();
     }
   }
@@ -444,7 +532,6 @@ class _DriverHomePageState extends State<DriverHomePage> {
           setState(() {
             isOnline = false;
             activeOrder = null;
-            driverBalance = 0.0;
           });
           saveState(online: false, name: driverName, phone: driverPhone, email: driverEmail, id: driverId);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -457,6 +544,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
           setState(() {
             driverBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
           });
+          checkActiveOrder();
         }
       }
     } catch (e) {
@@ -468,9 +556,24 @@ class _DriverHomePageState extends State<DriverHomePage> {
     try {
       final result = await apiService.checkActiveOrder(driverEmail);
       if (result['success'] == true) {
+        final newOrder = result['data'];
         setState(() {
-          activeOrder = result['data'];
+          activeOrder = newOrder;
         });
+
+        if (newOrder != null && newOrder['status'] == 'pending') {
+          navigateToOrderRequest(
+            orderId: newOrder['id'].toString(),
+            origin: newOrder['origin'],
+            destination: newOrder['destination'],
+            price: newOrder['price'].toString().split('.')[0],
+            status: newOrder['status'],
+            passengerName: newOrder['passenger_name'],
+            paymentType: newOrder['payment_type'],
+            adminFee: newOrder['admin_fee']?.toString().split('.')[0],
+            driverFare: newOrder['driver_fare']?.toString().split('.')[0],
+          );
+        }
       }
     } catch (e) {
       debugPrint("Error fetching active order: $e");
@@ -508,7 +611,21 @@ class _DriverHomePageState extends State<DriverHomePage> {
           driverPhone = result['data']['phone'];
           driverEmail = result['data']['email'];
           driverId = 'DRV-' + result['data']['id'].toString().padLeft(4, '0');
+          driverRating = double.tryParse(result['data']['rating']?.toString() ?? '') ?? 5.0;
+          driverAcceptanceRate = int.tryParse(result['data']['acceptance_rate']?.toString() ?? '') ?? 100;
+          driverDrivingHours = double.tryParse(result['data']['driving_hours']?.toString() ?? '') ?? 0.0;
         });
+      } else if (result['success'] == false && result['message'] == 'Driver not found.') {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        stopSyncTimer();
+        if (mounted) {
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       debugPrint("Error fetching profile: $e");
@@ -624,7 +741,6 @@ class _DriverHomePageState extends State<DriverHomePage> {
         setState(() {
           isOnline = false;
           activeOrder = null;
-          driverBalance = 0.0;
         });
         saveState(online: false, name: driverName, phone: driverPhone, email: driverEmail, id: driverId);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -793,8 +909,10 @@ class _DriverHomePageState extends State<DriverHomePage> {
               subTitleColor: subTitleColor,
               cardBg: cardBg,
               dividerColor: dividerColor,
+              rating: driverRating,
+              acceptanceRate: driverAcceptanceRate,
+              drivingHours: driverDrivingHours,
               onRefresh: () async {
-                if (!isOnline) return;
                 setState(() => _refreshingDashboard = true);
                 
                 final timeoutTimer = Timer(const Duration(seconds: 8), () {
@@ -804,11 +922,18 @@ class _DriverHomePageState extends State<DriverHomePage> {
                 });
 
                 try {
-                  await Future.wait([
-                    fetchDriverProfile(),
-                    checkActiveOrder(),
-                    fetchOrderHistory(),
-                  ]);
+                  if (isOnline) {
+                    await Future.wait([
+                      fetchDriverProfile(),
+                      checkActiveOrder(),
+                      fetchOrderHistory(),
+                    ]);
+                  } else {
+                    await Future.wait([
+                      fetchDriverProfile(),
+                      fetchOrderHistory(),
+                    ]);
+                  }
                 } catch (e) {
                   debugPrint("Dashboard refresh error: $e");
                 } finally {

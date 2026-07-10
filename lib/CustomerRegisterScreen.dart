@@ -99,12 +99,12 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -117,18 +117,18 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset('assets/logo-white.png', height: 72, fit: BoxFit.contain),
-                  const SizedBox(height: 36),
+                  Image.asset('assets/logo-transparent.png', height: 120, fit: BoxFit.contain),
+                  const SizedBox(height: 24),
                   
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(28),
-                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      border: Border.all(color: Colors.black.withOpacity(0.05)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
+                          color: Colors.black.withOpacity(0.04),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         )
@@ -141,7 +141,7 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                           'DAFTAR AKUN CUSTOMER',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.white,
+                            color: Color(0xFF0F172A),
                             fontSize: 14,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1.5,
@@ -152,7 +152,7 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                         // Name Field
                         TextFormField(
                           controller: _nameController,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.black87),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
                               return 'Nama wajib diisi';
@@ -161,10 +161,10 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                           },
                           decoration: InputDecoration(
                             labelText: 'Nama Lengkap',
-                            labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+                            labelStyle: const TextStyle(color: Colors.black45, fontSize: 13),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
-                            prefixIcon: const Icon(Icons.person_outline_rounded, color: Colors.white54),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.black12)),
+                            prefixIcon: const Icon(Icons.person_outline_rounded, color: Colors.black45),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -172,7 +172,7 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                         // Email Field
                         TextFormField(
                           controller: _emailController,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.black87),
                           keyboardType: TextInputType.emailAddress,
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
@@ -185,10 +185,10 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                           },
                           decoration: InputDecoration(
                             labelText: 'Email Customer',
-                            labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+                            labelStyle: const TextStyle(color: Colors.black45, fontSize: 13),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
-                            prefixIcon: const Icon(Icons.email_outlined, color: Colors.white54),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.black12)),
+                            prefixIcon: const Icon(Icons.email_outlined, color: Colors.black45),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -197,7 +197,7 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.black87),
                           validator: (value) {
                             if (value == null || value.isEmpty) {
                               return 'Password wajib diisi';
@@ -209,14 +209,14 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                           },
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            labelStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+                            labelStyle: const TextStyle(color: Colors.black45, fontSize: 13),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.white10)),
-                            prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.white54),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: Colors.black12)),
+                            prefixIcon: const Icon(Icons.lock_outline_rounded, color: Colors.black45),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                color: Colors.white54,
+                                color: Colors.black45,
                               ),
                               onPressed: () {
                                 setState(() {
@@ -259,7 +259,7 @@ class _CustomerRegisterScreenState extends State<CustomerRegisterScreen> {
                     child: RichText(
                       text: const TextSpan(
                         text: 'Sudah punya akun? ',
-                        style: TextStyle(color: Colors.white54, fontSize: 14),
+                        style: TextStyle(color: Colors.black54, fontSize: 14),
                         children: [
                           TextSpan(
                             text: 'Masuk di sini',

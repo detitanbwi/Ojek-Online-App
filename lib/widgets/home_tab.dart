@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import '../MapScreen.dart';
+import '../LoginScreen.dart';
+import '../utils/formatter.dart';
 
 class HomeTab extends StatefulWidget {
   final bool isDarkMode;
@@ -36,11 +38,77 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
   Timer? _statusCheckTimer;
 
+  String _customerName = "User";
+  double _customerBalance = 0.0;
+  bool _isLoadingProfile = false;
+
   @override
   void initState() {
     super.initState();
     _loadActiveOrder();
     _determineUserCity();
+    _loadCustomerProfile();
+  }
+
+  void _handleExpiredSession(SharedPreferences prefs) async {
+    await prefs.clear();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  void _loadCustomerProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('customer_email') ?? '';
+    final name = prefs.getString('customer_name') ?? 'User';
+    
+    if (mounted) {
+      setState(() {
+        _customerName = name;
+      });
+    }
+
+    if (email.isEmpty) return;
+
+    if (mounted) {
+      setState(() {
+        _isLoadingProfile = true;
+      });
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('https://ojek.wirodev.com/api/customer/profile?email=$email'),
+      );
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (result['success'] == true && result['data'] != null) {
+          if (mounted) {
+            setState(() {
+              _customerBalance = double.tryParse(result['data']['balance'].toString()) ?? 0.0;
+              _customerName = result['data']['name'] ?? name;
+            });
+          }
+          await prefs.setString('customer_name', _customerName);
+        } else {
+          _handleExpiredSession(prefs);
+        }
+      } else if (response.statusCode == 404) {
+        _handleExpiredSession(prefs);
+      }
+    } catch (e) {
+      debugPrint("Error loading customer profile: $e");
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingProfile = false;
+        });
+      }
+    }
   }
 
   @override
@@ -222,7 +290,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Selamat Pagi, Angga",
+                          "Halo, ${_customerName.split(' ').first}!",
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w900,
@@ -479,9 +547,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
-                              "Rp 142.500",
-                              style: TextStyle(
+                            Text(
+                              "Rp ${formatPrice(_customerBalance.toString().split('.')[0])}",
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 26,
                                 fontWeight: FontWeight.bold,

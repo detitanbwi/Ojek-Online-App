@@ -154,7 +154,13 @@ class _CustomerScreenState extends State<CustomerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 64, color: const Color(0xFF002B93).withOpacity(0.6)),
+            Icon(
+              icon,
+              size: 64,
+              color: isDark
+                  ? const Color(0xFFFF8C00).withOpacity(0.8)
+                  : const Color(0xFF002B93).withOpacity(0.6),
+            ),
             const SizedBox(height: 16),
             Text(
               title,
@@ -168,9 +174,9 @@ class _CustomerScreenState extends State<CustomerScreen> {
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey,
+                color: isDark ? Colors.white60 : Colors.black54,
               ),
             ),
           ],

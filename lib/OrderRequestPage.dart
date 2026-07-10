@@ -53,10 +53,21 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
   String? _orderStatus;
   String? _serviceType;
   bool _isLoading = false;
+  bool _isDarkMode = true;
+
+  void _loadThemeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _isDarkMode = prefs.getBool('is_dark_mode') ?? true;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadThemeMode();
     
     _passengerName = widget.passengerName ?? 'Penumpang';
     _paymentType = widget.paymentType ?? 'cash';
@@ -296,15 +307,38 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
   Widget build(BuildContext context) {
     final bool isPending = _orderStatus == 'pending';
     
+    // Dynamic styling
+    final Color scaffoldBg1 = _isDarkMode 
+        ? (isPending ? const Color(0xFF0F172A) : const Color(0xFF060B26))
+        : (isPending ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9));
+    final Color scaffoldBg2 = _isDarkMode
+        ? (isPending ? const Color(0xFF1E293B) : const Color(0xFF111827))
+        : (isPending ? const Color(0xFFE2E8F0) : const Color(0xFFCBD5E1));
+
+    final Color titleTextColor = _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final Color subtitleTextColor = _isDarkMode ? Colors.white.withOpacity(0.4) : Colors.black54;
+    final Color dividerColor = _isDarkMode ? Colors.white12 : Colors.black.withOpacity(0.06);
+
+    final Color cardBackground = _isDarkMode ? Colors.white.withOpacity(0.04) : Colors.white;
+    final Color cardBorderColor = _isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05);
+    final List<BoxShadow> cardShadow = _isDarkMode 
+        ? [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]
+        : [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))];
+
+    final Color infoLabelColor = _isDarkMode ? Colors.white.withOpacity(0.3) : Colors.black45;
+    final Color infoValueColor = _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+
+    final Color bottomBarColor = _isDarkMode
+        ? (isPending ? const Color(0xFF0F172A).withOpacity(0.6) : const Color(0xFF060B26).withOpacity(0.8))
+        : (isPending ? const Color(0xFFF8FAFC).withOpacity(0.9) : const Color(0xFFF1F5F9).withOpacity(0.95));
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: isPending 
-                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
-                : [const Color(0xFF060B26), const Color(0xFF111827)],
+            colors: [scaffoldBg1, scaffoldBg2],
           ),
         ),
         child: SafeArea(
@@ -312,6 +346,21 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
             ? const Center(child: CircularProgressIndicator(color: Colors.amber))
             : Column(
                 children: [
+                  // Back button if order is not pending
+                  if (!isPending)
+                    Align(
+                      alignment: Alignment.topLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 12, top: 12),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.arrow_back,
+                            color: _isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                    ),
                   // Scrollable content area containing the timer and the ride details card
                   Expanded(
                     child: SingleChildScrollView(
@@ -319,14 +368,14 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
                       child: Column(
                         children: [
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 10),
                           
                           if (isPending) ...[
                             // 1. Glowing countdown timer (for pending)
                             Container(
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.02),
+                                color: _isDarkMode ? Colors.white.withOpacity(0.02) : Colors.black.withOpacity(0.02),
                                 shape: BoxShape.circle,
                               ),
                               child: Stack(
@@ -350,16 +399,16 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                     child: CircularProgressIndicator(
                                       value: _secondsRemaining / 10.0,
                                       strokeWidth: 4,
-                                      backgroundColor: Colors.white.withOpacity(0.08),
+                                      backgroundColor: _isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
                                       valueColor: const AlwaysStoppedAnimation<Color>(Colors.amber),
                                     ),
                                   ),
                                   Text(
                                     '$_secondsRemaining',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 28,
                                       fontWeight: FontWeight.w900,
-                                      color: Colors.white,
+                                      color: titleTextColor,
                                     ),
                                   ),
                                 ],
@@ -369,12 +418,12 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                             const SizedBox(height: 24),
                             
                             // 2. Alert Header Title
-                            const Text(
+                            Text(
                               'ADA ORDERAN MASUK!',
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w900,
-                                color: Colors.white,
+                                color: titleTextColor,
                                 letterSpacing: 1.5,
                               ),
                             ),
@@ -405,10 +454,10 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           : 'PERJALANAN SEDANG BERLANGSUNG'),
                                   style: TextStyle(
                                     color: _orderStatus == 'completed'
-                                        ? Colors.greenAccent
+                                        ? (_isDarkMode ? Colors.greenAccent : Colors.green.shade700)
                                         : (_orderStatus == 'cancelled' || _orderStatus == 'rejected'
                                             ? Colors.redAccent
-                                            : Colors.greenAccent),
+                                            : (_isDarkMode ? Colors.greenAccent : Colors.green.shade700)),
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 1,
@@ -423,7 +472,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                             'Order ID: #${widget.orderId}',
                             style: TextStyle(
                               fontSize: 13, 
-                              color: Colors.white.withOpacity(0.4),
+                              color: subtitleTextColor,
                               fontWeight: FontWeight.w500
                             ),
                           ),
@@ -434,16 +483,10 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                           Container(
                             padding: const EdgeInsets.all(24.0),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.04),
+                              color: cardBackground,
                               borderRadius: BorderRadius.circular(28),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
+                              border: Border.all(color: cardBorderColor),
+                              boxShadow: cardShadow,
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -461,8 +504,8 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           width: 1.5,
                                           height: 65,
                                           margin: const EdgeInsets.symmetric(vertical: 6),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.white12,
+                                          decoration: BoxDecoration(
+                                            color: dividerColor,
                                           ),
                                         ),
                                         const Icon(Icons.location_on, color: Colors.redAccent, size: 22),
@@ -478,7 +521,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           Text(
                                             'TITIK JEMPUT',
                                             style: TextStyle(
-                                              color: Colors.white.withOpacity(0.3),
+                                              color: infoLabelColor,
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
                                               letterSpacing: 1.2
@@ -487,8 +530,8 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           const SizedBox(height: 4),
                                           Text(
                                             widget.origin,
-                                            style: const TextStyle(
-                                              color: Colors.white,
+                                            style: TextStyle(
+                                              color: infoValueColor,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -500,7 +543,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           Text(
                                             'TITIK TUJUAN',
                                             style: TextStyle(
-                                              color: Colors.white.withOpacity(0.3),
+                                              color: infoLabelColor,
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
                                               letterSpacing: 1.2
@@ -509,8 +552,8 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           const SizedBox(height: 4),
                                           Text(
                                             widget.destination,
-                                            style: const TextStyle(
-                                              color: Colors.white,
+                                            style: TextStyle(
+                                              color: infoValueColor,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -522,7 +565,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                 ),
                                 
                                 const SizedBox(height: 24),
-                                const Divider(color: Colors.white12, thickness: 1),
+                                Divider(color: dividerColor, thickness: 1),
                                 const SizedBox(height: 16),
 
                                 // Additional Details Card for Active Trip
@@ -534,12 +577,12 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                         children: [
                                           Text(
                                             'PENUMPANG',
-                                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                            style: TextStyle(color: infoLabelColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             _passengerName!,
-                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                            style: TextStyle(color: infoValueColor, fontSize: 13, fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
@@ -550,12 +593,12 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                         children: [
                                           Text(
                                             'LAYANAN',
-                                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                            style: TextStyle(color: infoLabelColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             _serviceType == 'wiro_car' ? 'WiroCar' : 'WiroRide',
-                                            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                            style: TextStyle(color: infoValueColor, fontSize: 13, fontWeight: FontWeight.bold),
                                           ),
                                         ],
                                       ),
@@ -566,13 +609,15 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                         children: [
                                           Text(
                                             'BAYAR',
-                                            style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                            style: TextStyle(color: infoLabelColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             _paymentType == 'qris' ? 'QRIS' : 'Tunai',
                                             style: TextStyle(
-                                              color: _paymentType == 'qris' ? Colors.indigoAccent.shade100 : Colors.greenAccent.shade100, 
+                                              color: _paymentType == 'qris' 
+                                                  ? (_isDarkMode ? Colors.indigoAccent.shade100 : Colors.indigo.shade700) 
+                                                  : (_isDarkMode ? Colors.greenAccent.shade100 : Colors.green.shade700), 
                                               fontSize: 13, 
                                               fontWeight: FontWeight.bold
                                             ),
@@ -600,11 +645,11 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           icon: const Icon(Icons.navigation_rounded, size: 16),
                                           label: const Text('Navigasi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.white.withOpacity(0.06),
-                                            foregroundColor: Colors.white,
+                                            backgroundColor: _isDarkMode ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+                                            foregroundColor: _isDarkMode ? Colors.white : Colors.black87,
                                             padding: const EdgeInsets.symmetric(vertical: 14),
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                            side: BorderSide(color: _isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black12),
                                             elevation: 0,
                                           ),
                                         ),
@@ -630,11 +675,11 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           icon: Icon(_paymentType == 'qris' ? Icons.money : Icons.qr_code, size: 16),
                                           label: Text(_paymentType == 'qris' ? 'Bayar Tunai' : 'Bayar QRIS', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.white.withOpacity(0.06),
-                                            foregroundColor: Colors.white,
+                                            backgroundColor: _isDarkMode ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+                                            foregroundColor: _isDarkMode ? Colors.white : Colors.black87,
                                             padding: const EdgeInsets.symmetric(vertical: 14),
                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                            side: BorderSide(color: _isDarkMode ? Colors.white.withOpacity(0.1) : Colors.black12),
                                             elevation: 0,
                                           ),
                                         ),
@@ -666,11 +711,11 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                         children: [
                                           Text(
                                             'TARIF PENUMPANG',
-                                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                            style: TextStyle(color: _isDarkMode ? Colors.white70 : Colors.black54, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
                                           ),
                                           Text(
                                             'Rp ${formatPrice(widget.price)}',
-                                            style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w700),
+                                            style: TextStyle(color: _isDarkMode ? Colors.white70 : const Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.w700),
                                           ),
                                         ],
                                       ),
@@ -691,7 +736,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           ],
                                         ),
                                         const SizedBox(height: 12),
-                                        Divider(color: Colors.white.withOpacity(0.07), thickness: 1),
+                                        Divider(color: _isDarkMode ? Colors.white.withOpacity(0.07) : Colors.black.withOpacity(0.05), thickness: 1),
                                         const SizedBox(height: 12),
                                       ],
                                       // Driver net earning
@@ -704,11 +749,11 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                               children: [
                                                 Text(
                                                   'PENDAPATANMU',
-                                                  style: TextStyle(color: Colors.amber.shade300, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                                                  style: TextStyle(color: _isDarkMode ? Colors.amber.shade300 : Colors.amber.shade800, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                                                 ),
-                                                const Text(
+                                                Text(
                                                   'Setelah potongan admin',
-                                                  style: TextStyle(color: Colors.white38, fontSize: 9),
+                                                  style: TextStyle(color: _isDarkMode ? Colors.white38 : Colors.black38, fontSize: 9),
                                                 ),
                                               ],
                                             ),
@@ -716,7 +761,7 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                                           const SizedBox(width: 8),
                                           Text(
                                             'Rp ${formatPrice(widget.driverFare ?? widget.price)}',
-                                            style: const TextStyle(color: Colors.amber, fontSize: 22, fontWeight: FontWeight.w900),
+                                            style: TextStyle(color: _isDarkMode ? Colors.amber : Colors.amber.shade800, fontSize: 22, fontWeight: FontWeight.w900),
                                           ),
                                         ],
                                       ),
@@ -736,8 +781,8 @@ class _OrderRequestPageState extends State<OrderRequestPage> with SingleTickerPr
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
                       decoration: BoxDecoration(
-                        color: isPending ? const Color(0xFF0F172A).withOpacity(0.6) : const Color(0xFF060B26).withOpacity(0.8),
-                        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+                        color: bottomBarColor,
+                        border: Border(top: BorderSide(color: cardBorderColor)),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
