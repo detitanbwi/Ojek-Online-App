@@ -562,7 +562,7 @@ class _DriverHomePageState extends State<DriverHomePage> {
         });
 
         if (newOrder != null && newOrder['status'] == 'pending') {
-          navigateToOrderRequest(
+          _MyAppState.navigateToOrderRequest(
             orderId: newOrder['id'].toString(),
             origin: newOrder['origin'],
             destination: newOrder['destination'],
