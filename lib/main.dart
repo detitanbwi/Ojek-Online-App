@@ -307,8 +307,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
   String driverId = 'DRV-0001';
   bool isLoading = false;
   double driverBalance = 0.0;
-  double driverRating = 5.0;
-  int driverAcceptanceRate = 100;
+  double driverRating = 0.0;
+  int driverAcceptanceRate = 0;
   double driverDrivingHours = 0.0;
   late ApiService apiService;
   
@@ -611,8 +611,8 @@ class _DriverHomePageState extends State<DriverHomePage> {
           driverPhone = result['data']['phone'];
           driverEmail = result['data']['email'];
           driverId = 'DRV-' + result['data']['id'].toString().padLeft(4, '0');
-          driverRating = double.tryParse(result['data']['rating']?.toString() ?? '') ?? 5.0;
-          driverAcceptanceRate = int.tryParse(result['data']['acceptance_rate']?.toString() ?? '') ?? 100;
+          driverRating = double.tryParse(result['data']['rating']?.toString() ?? '') ?? 0.0;
+          driverAcceptanceRate = int.tryParse(result['data']['acceptance_rate']?.toString() ?? '') ?? 0;
           driverDrivingHours = double.tryParse(result['data']['driving_hours']?.toString() ?? '') ?? 0.0;
         });
       } else if (result['success'] == false && result['message'] == 'Driver not found.') {

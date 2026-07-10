@@ -214,9 +214,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (isDriver) ...[
                   Text('• wiro@sableng.com (Wiro Sableng)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
                   Text('• bento@wirojek.com (Bento)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
+                  Text('• admin@wirojek.com (Admin Web Portal)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
                 ] else ...[
                   Text('• angga@example.com (Angga)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
                   Text('• dewi@example.com (Dewi Puspita)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
+                  Text('• admin@wirojek.com (Admin Web Portal)', style: TextStyle(fontSize: 10.5, color: Colors.amber.shade900, fontWeight: FontWeight.w600)),
                 ],
                 const SizedBox(height: 4),
                 Text('Password: password123', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
