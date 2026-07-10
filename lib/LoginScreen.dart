@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
 import 'main.dart';
 import 'CustomerScreen.dart';
 import 'CustomerRegisterScreen.dart';
@@ -30,6 +32,107 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _isDriverRole ? 0 : 1);
+
+    // Show permission guidance immediately when app opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showPermissionGuidance();
+    });
+  }
+
+  Future<void> _showPermissionGuidance() async {
+    // 1. Overlay permission check (display over other apps)
+    const platform = MethodChannel('com.wirodev.wirojek/intent');
+    try {
+      final bool hasOverlayPermission = await platform.invokeMethod('checkOverlayPermission');
+      if (!hasOverlayPermission && mounted) {
+        final bool? grant = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            icon: Icon(Icons.layers_rounded, color: Colors.blue.shade700, size: 40),
+            title: const Text('Izinkan Aplikasi di Atas Layar', textAlign: TextAlign.center),
+            content: const Text(
+              'Wirojek memerlukan izin "Tampilkan di atas aplikasi lain" agar notifikasi orderan masuk bisa muncul secara otomatis meskipun Anda sedang menggunakan aplikasi lain.\n\nMohon aktifkan izin ini untuk pengalaman terbaik.',
+              textAlign: TextAlign.center,
+            ),
+            actionsAlignment: MainAxisAlignment.center,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Abaikan', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF002B93),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Izinkan', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+
+        if (grant == true) {
+          await platform.invokeMethod('requestOverlayPermission');
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking overlay permission: $e");
+    }
+
+    // 2. Location permission check
+    if (!mounted) return;
+    await _checkLocationPermission();
+  }
+
+  Future<void> _checkLocationPermission() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if ((permission == LocationPermission.denied || permission == LocationPermission.deniedForever) && mounted) {
+      final bool? requestAgain = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          icon: Icon(Icons.location_off_rounded, color: Colors.orange.shade700, size: 40),
+          title: const Text('Akses Lokasi Diperlukan', textAlign: TextAlign.center),
+          content: const Text(
+            'Wirojek memerlukan akses lokasi agar dapat menentukan posisi Anda, mencocokkan orderan terdekat, dan menampilkan peta secara akurat.\n\nTanpa izin lokasi, fitur utama tidak dapat berjalan.',
+            textAlign: TextAlign.center,
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Abaikan', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFCC5900),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Izinkan', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+
+      if (requestAgain == true) {
+        if (permission == LocationPermission.deniedForever) {
+          await Geolocator.openAppSettings();
+        } else {
+          await _checkLocationPermission();
+        }
+      }
+    }
   }
 
   @override
